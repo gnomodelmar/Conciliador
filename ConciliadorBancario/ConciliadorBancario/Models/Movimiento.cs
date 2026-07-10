@@ -10,7 +10,8 @@ namespace ConciliadorBancario.Models
         public DateTime Fecha { get; set; }
         public double Monto { get; set; }
         public string Concepto { get; set; }
-        public string Referencia_CodOperacion { get; set; }
+        public string Referencia_CodOperacion { get; set; } // Cod Banco
+        public string CodOperacionSistema { get; set; } // Cod Sistema (Only applies to System rows)
         public string Estado { get; set; }
         public string Observaciones { get; set; }
         public int? MatchId { get; set; }

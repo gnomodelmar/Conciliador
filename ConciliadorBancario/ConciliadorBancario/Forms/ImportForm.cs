@@ -83,7 +83,8 @@ namespace ConciliadorBancario.Forms
 
         private void LoadBancos()
         {
-            var bancos = _confRepo.GetAllBancos();
+            // Only load mappings for this specific source type
+            var bancos = _confRepo.GetAllBancos(_tipoFuente);
             foreach(var b in bancos)
             {
                 _cmbBancos.Items.Add(b.NombreBanco);
@@ -111,7 +112,7 @@ namespace ConciliadorBancario.Forms
             }
             if (_cmbBancos.SelectedItem == null)
             {
-                MessageBox.Show("Seleccione una configuración de banco/sistema primero.");
+                MessageBox.Show($"Cree un mapeo para '{_tipoFuente}' en Configuración primero.");
                 return;
             }
 
@@ -125,7 +126,7 @@ namespace ConciliadorBancario.Forms
                 }
                 else
                 {
-                    var conf = _confRepo.GetConfiguracionBanco(configName);
+                    var conf = _confRepo.GetConfiguracionBanco(configName, "Sistema");
                     _movimientosPrevia = _importadorService.PrepararImportacionSistema(_txtFilePath.Text, conf);
                 }
 
@@ -149,7 +150,6 @@ namespace ConciliadorBancario.Forms
 
         private void BtnGuardar_Click(object sender, EventArgs e)
         {
-            // Only import those that have Activo == true in the preview
             var seleccionados = _movimientosPrevia.Where(m => m.Activo).ToList();
             if (seleccionados.Count == 0)
             {

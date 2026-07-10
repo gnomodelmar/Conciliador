@@ -27,7 +27,7 @@ namespace ConciliadorBancario.Services
 
         public List<Movimiento> PrepararImportacionBanco(string filePath, string nombreBanco)
         {
-            var conf = _confRepo.GetConfiguracionBanco(nombreBanco);
+            var conf = _confRepo.GetConfiguracionBanco(nombreBanco, "Banco");
             if (conf == null) throw new Exception($"No hay configuración mapeada para el banco: {nombreBanco}");
 
             DataTable dt = filePath.EndsWith(".csv") ? _excelReader.ReadCsvToDataTable(filePath) : _excelReader.ReadExcelToDataTable(filePath);
@@ -53,7 +53,6 @@ namespace ConciliadorBancario.Services
                 {
                     mov.Monto = DataSanitizer.ParseMonto(GetRowValue(row, conf.ColumnaMonto));
 
-                    // Handle dynamic sign based on ColumnaTipo
                     if (!string.IsNullOrEmpty(conf.ColumnaTipo) && !string.IsNullOrEmpty(conf.ValorTipoSalida))
                     {
                         string tipo = GetRowValue(row, conf.ColumnaTipo);
@@ -136,7 +135,7 @@ namespace ConciliadorBancario.Services
 
                 mov.Concepto = GetRowValue(row, conf.ColumnaConcepto);
                 mov.Referencia_CodOperacion = GetRowValue(row, conf.ColumnaReferencia);
-                // Assign bank name dynamically if it was used for System parsing
+                mov.CodOperacionSistema = GetRowValue(row, conf.ColumnaCodOperacionSistema);
                 mov.Banco = conf.NombreBanco;
 
                 movimientos.Add(mov);

@@ -28,7 +28,7 @@ namespace ConciliadorBancario.Forms
         private void InitializeComponent()
         {
             this.Text = "Configuración";
-            this.Size = new Size(1000, 700);
+            this.Size = new Size(1250, 700);
 
             var tabControl = new TabControl { Dock = DockStyle.Fill };
 
@@ -38,7 +38,7 @@ namespace ConciliadorBancario.Forms
             _gridBancos = new DataGridView
             {
                 Location = new Point(10, 10),
-                Size = new Size(950, 250),
+                Size = new Size(1200, 250),
                 AutoGenerateColumns = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
@@ -46,20 +46,26 @@ namespace ConciliadorBancario.Forms
                 AllowUserToDeleteRows = true
             };
 
-            _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "NombreBanco", DataPropertyName = "NombreBanco", HeaderText = "Nombre del Banco (Obligatorio)", Width = 150 });
+            _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "NombreBanco", DataPropertyName = "NombreBanco", HeaderText = "Nombre del Banco", Width = 130 });
+
+            var cmbTipoConf = new DataGridViewComboBoxColumn { Name = "TipoConfiguracion", DataPropertyName = "TipoConfiguracion", HeaderText = "Aplica a", Width = 90 };
+            cmbTipoConf.Items.AddRange(new[] { "Banco", "Sistema" });
+            _gridBancos.Columns.Add(cmbTipoConf);
+
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaFecha", DataPropertyName = "ColumnaFecha", HeaderText = "Col. Fecha", Width = 100 });
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaMonto", DataPropertyName = "ColumnaMonto", HeaderText = "Col. Monto (Unica)", Width = 100 });
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaMontoEntrada", DataPropertyName = "ColumnaMontoEntrada", HeaderText = "Col. Entrada", Width = 100 });
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaMontoSalida", DataPropertyName = "ColumnaMontoSalida", HeaderText = "Col. Salida", Width = 100 });
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaConcepto", DataPropertyName = "ColumnaConcepto", HeaderText = "Col. Concepto", Width = 100 });
-            _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaReferencia", DataPropertyName = "ColumnaReferencia", HeaderText = "Col. Referencia", Width = 100 });
+            _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaReferencia", DataPropertyName = "ColumnaReferencia", HeaderText = "Col. Ref. Banco", Width = 100 });
+            _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaCodOperacionSistema", DataPropertyName = "ColumnaCodOperacionSistema", HeaderText = "Col. Ref. Sist.", Width = 100 });
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaTipo", DataPropertyName = "ColumnaTipo", HeaderText = "Col. Tipo", Width = 80 });
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ValorTipoSalida", DataPropertyName = "ValorTipoSalida", HeaderText = "Valor que resta", Width = 100 });
 
-            var btnSaveBancos = new Button { Text = "Guardar Cambios Bancos", Location = new Point(10, 270), Width = 200 };
+            var btnSaveBancos = new Button { Text = "Guardar Cambios Mapeos", Location = new Point(10, 270), Width = 200 };
             btnSaveBancos.Click += BtnSaveBancos_Click;
 
-            var btnDeleteBancos = new Button { Text = "Eliminar Banco Seleccionado", Location = new Point(220, 270), Width = 200 };
+            var btnDeleteBancos = new Button { Text = "Eliminar Mapeo Seleccionado", Location = new Point(220, 270), Width = 200 };
             btnDeleteBancos.Click += BtnDeleteBancos_Click;
 
             tabBancos.Controls.Add(_gridBancos);
@@ -168,9 +174,13 @@ namespace ConciliadorBancario.Forms
             _gridBancos.DataSource = new System.ComponentModel.BindingList<ConfiguracionBanco>(bancos);
 
             _cmbBancoReglas.Items.Clear();
+            var uniqueBancos = new HashSet<string>();
             foreach(var b in bancos)
             {
-                _cmbBancoReglas.Items.Add(b.NombreBanco);
+                if (b.TipoConfiguracion == "Banco" && uniqueBancos.Add(b.NombreBanco))
+                {
+                    _cmbBancoReglas.Items.Add(b.NombreBanco);
+                }
             }
         }
 
@@ -189,7 +199,7 @@ namespace ConciliadorBancario.Forms
                 {
                     foreach (var conf in bindingList)
                     {
-                        if (!string.IsNullOrWhiteSpace(conf.NombreBanco))
+                        if (!string.IsNullOrWhiteSpace(conf.NombreBanco) && !string.IsNullOrWhiteSpace(conf.TipoConfiguracion))
                         {
                             _confRepo.SaveConfiguracionBanco(conf);
                         }
@@ -211,10 +221,10 @@ namespace ConciliadorBancario.Forms
                 var conf = _gridBancos.SelectedRows[0].DataBoundItem as ConfiguracionBanco;
                 if (conf != null && !string.IsNullOrWhiteSpace(conf.NombreBanco))
                 {
-                    var res = MessageBox.Show($"¿Eliminar configuración de {conf.NombreBanco}?", "Confirmar", MessageBoxButtons.YesNo);
+                    var res = MessageBox.Show($"¿Eliminar configuración de {conf.NombreBanco} ({conf.TipoConfiguracion})?", "Confirmar", MessageBoxButtons.YesNo);
                     if (res == DialogResult.Yes)
                     {
-                        _confRepo.DeleteConfiguracionBanco(conf.NombreBanco);
+                        _confRepo.DeleteConfiguracionBanco(conf.NombreBanco, conf.TipoConfiguracion);
                         LoadBancos();
                     }
                 }

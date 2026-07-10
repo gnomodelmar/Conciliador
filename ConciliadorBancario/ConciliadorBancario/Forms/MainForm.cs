@@ -39,7 +39,7 @@ namespace ConciliadorBancario.Forms
             this.Text = "Sistema de Conciliación Bancaria";
             this.Size = new Size(1200, 800);
 
-            // MenuStrip setup (must be added first or docked to top properly)
+            // MenuStrip setup
             _menuStrip = new MenuStrip();
             var menuArchivo = new ToolStripMenuItem("Archivo");
             var menuImportarBanco = new ToolStripMenuItem("Importar Banco", null, (s,e) => ImportarBanco());
@@ -100,10 +100,8 @@ namespace ConciliadorBancario.Forms
             panelBottom.Controls.Add(_btnAutoConciliar);
             panelBottom.Controls.Add(_btnExportarMasivos);
 
-            // Important: We add controls in specific order so docking doesn't overlap MenuStrip
             this.Controls.Add(splitContainer);
             this.Controls.Add(panelBottom);
-            // Ensure MenuStrip stays at top
             _menuStrip.BringToFront();
 
             _gridBanco.CellClick += (s, e) => BuscarSimilares(e);
@@ -126,7 +124,12 @@ namespace ConciliadorBancario.Forms
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Fecha", HeaderText = "Fecha", DataPropertyName = "FechaFormateada", ReadOnly = true, Width = 80 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Monto", HeaderText = "Monto", DataPropertyName = "MontoFormateado", ReadOnly = true, Width = 80 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Concepto", HeaderText = "Concepto", DataPropertyName = "Concepto", ReadOnly = true, Width = 150 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CodOperacion", HeaderText = "Cod. Operación", DataPropertyName = "Referencia_CodOperacion", ReadOnly = true, Width = 100 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CodOperacion", HeaderText = "Cod. Banco", DataPropertyName = "Referencia_CodOperacion", ReadOnly = true, Width = 100 });
+
+            if (!isBanco)
+            {
+                grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CodOperacionSistema", HeaderText = "Cod. Sistema", DataPropertyName = "CodOperacionSistema", ReadOnly = true, Width = 100 });
+            }
 
             if (isBanco)
             {

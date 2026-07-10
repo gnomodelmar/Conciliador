@@ -55,8 +55,8 @@ namespace ConciliadorBancario.Data
         public void InsertMovimiento(Movimiento mov, SQLiteConnection connection, SQLiteTransaction transaction)
         {
             string query = @"
-                INSERT INTO Movimientos (LoteId, TipoFuente, Fecha, Monto, Concepto, Referencia_CodOperacion, Estado, Observaciones, Banco, Activo)
-                VALUES (@LoteId, @TipoFuente, @Fecha, @Monto, @Concepto, @Referencia_CodOperacion, @Estado, @Observaciones, @Banco, 1)";
+                INSERT INTO Movimientos (LoteId, TipoFuente, Fecha, Monto, Concepto, Referencia_CodOperacion, CodOperacionSistema, Estado, Observaciones, Banco, Activo)
+                VALUES (@LoteId, @TipoFuente, @Fecha, @Monto, @Concepto, @Referencia_CodOperacion, @CodOperacionSistema, @Estado, @Observaciones, @Banco, 1)";
 
             using (var command = new SQLiteCommand(query, connection, transaction))
             {
@@ -66,6 +66,7 @@ namespace ConciliadorBancario.Data
                 command.Parameters.AddWithValue("@Monto", mov.Monto);
                 command.Parameters.AddWithValue("@Concepto", mov.Concepto ?? (object)DBNull.Value);
                 command.Parameters.AddWithValue("@Referencia_CodOperacion", mov.Referencia_CodOperacion ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@CodOperacionSistema", mov.CodOperacionSistema ?? (object)DBNull.Value);
                 command.Parameters.AddWithValue("@Estado", mov.Estado);
                 command.Parameters.AddWithValue("@Observaciones", mov.Observaciones ?? (object)DBNull.Value);
                 command.Parameters.AddWithValue("@Banco", mov.Banco ?? (object)DBNull.Value);
@@ -142,6 +143,7 @@ namespace ConciliadorBancario.Data
                 Monto = Convert.ToDouble(reader["Monto"]),
                 Concepto = reader["Concepto"] == DBNull.Value ? null : reader["Concepto"].ToString(),
                 Referencia_CodOperacion = reader["Referencia_CodOperacion"] == DBNull.Value ? null : reader["Referencia_CodOperacion"].ToString(),
+                CodOperacionSistema = reader["CodOperacionSistema"] == DBNull.Value ? null : reader["CodOperacionSistema"].ToString(),
                 Estado = reader["Estado"].ToString(),
                 Observaciones = reader["Observaciones"] == DBNull.Value ? null : reader["Observaciones"].ToString(),
                 MatchId = reader["MatchId"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["MatchId"]),
