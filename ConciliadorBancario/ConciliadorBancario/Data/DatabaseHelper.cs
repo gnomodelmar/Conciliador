@@ -60,9 +60,17 @@ namespace ConciliadorBancario.Data
                         ColumnaMontoEntrada TEXT, -- Si el banco usa columnas separadas
                         ColumnaMontoSalida TEXT,  -- Si el banco usa columnas separadas
                         ColumnaConcepto TEXT,
-                        ColumnaReferencia TEXT
+                        ColumnaReferencia TEXT,
+                        ColumnaTipo TEXT, -- Columna que dice si es Debe/Haber o Entrada/Salida
+                        ValorTipoSalida TEXT -- Valor en ColumnaTipo que indica que el monto debe ser negativo
                     );
                 ");
+
+                // Update existing ConfiguracionBancos table if it doesn't have the new columns
+                try {
+                    ExecuteQuery(connection, "ALTER TABLE ConfiguracionBancos ADD COLUMN ColumnaTipo TEXT;");
+                    ExecuteQuery(connection, "ALTER TABLE ConfiguracionBancos ADD COLUMN ValorTipoSalida TEXT;");
+                } catch { /* Ignore if columns already exist */ }
 
                 // ReglasAsientosMasivos
                 ExecuteQuery(connection, @"

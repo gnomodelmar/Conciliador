@@ -31,6 +31,7 @@ namespace ConciliadorBancario.Forms
             _movimientosPrevia = new List<Movimiento>();
 
             InitializeComponent();
+            LoadBancos();
         }
 
         private void InitializeComponent()
@@ -38,7 +39,7 @@ namespace ConciliadorBancario.Forms
             this.Text = $"Importar {_tipoFuente}";
             this.Size = new Size(800, 600);
 
-            var panelTop = new Panel { Dock = DockStyle.Top, Height = 60 };
+            var panelTop = new Panel { Dock = DockStyle.Top, Height = 70 };
 
             _txtFilePath = new TextBox { Location = new Point(10, 10), Width = 300, ReadOnly = true };
             var btnSelectFile = new Button { Text = "Seleccionar Archivo", Location = new Point(320, 8), Width = 150 };
@@ -47,17 +48,10 @@ namespace ConciliadorBancario.Forms
             panelTop.Controls.Add(_txtFilePath);
             panelTop.Controls.Add(btnSelectFile);
 
-            if (_tipoFuente == "Banco")
-            {
-                var lblBanco = new Label { Text = "Banco:", Location = new Point(10, 35), Width = 50 };
-                _cmbBancos = new ComboBox { Location = new Point(70, 35), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
-                // Fake static list for now, should come from DB config
-                _cmbBancos.Items.AddRange(new[] { "Galicia", "Santander", "BNA", "BBVA" });
-                if (_cmbBancos.Items.Count > 0) _cmbBancos.SelectedIndex = 0;
-
-                panelTop.Controls.Add(lblBanco);
-                panelTop.Controls.Add(_cmbBancos);
-            }
+            var lblBanco = new Label { Text = _tipoFuente == "Banco" ? "Banco:" : "Configuración:", Location = new Point(10, 40), Width = 100 };
+            _cmbBancos = new ComboBox { Location = new Point(120, 38), Width = 190, DropDownStyle = ComboBoxStyle.DropDownList };
+            panelTop.Controls.Add(lblBanco);
+            panelTop.Controls.Add(_cmbBancos);
 
             _btnCargar = new Button { Text = "Cargar Vista Previa", Location = new Point(480, 8), Width = 150 };
             _btnCargar.Click += BtnCargar_Click;
@@ -74,6 +68,7 @@ namespace ConciliadorBancario.Forms
             _gridPreview.Columns.Add(new DataGridViewTextBoxColumn { Name = "Fecha", HeaderText = "Fecha", DataPropertyName = "Fecha", Width = 80 });
             _gridPreview.Columns.Add(new DataGridViewTextBoxColumn { Name = "Monto", HeaderText = "Monto", DataPropertyName = "Monto", Width = 80 });
             _gridPreview.Columns.Add(new DataGridViewTextBoxColumn { Name = "Concepto", HeaderText = "Concepto", DataPropertyName = "Concepto", Width = 200 });
+            _gridPreview.Columns.Add(new DataGridViewTextBoxColumn { Name = "CodOperacion", HeaderText = "Cod. Operación", DataPropertyName = "Referencia_CodOperacion", Width = 100 });
             _gridPreview.Columns.Add(new DataGridViewTextBoxColumn { Name = "Obs", HeaderText = "Observaciones", DataPropertyName = "Observaciones", Width = 200 });
 
             var panelBottom = new Panel { Dock = DockStyle.Bottom, Height = 50 };
@@ -86,9 +81,19 @@ namespace ConciliadorBancario.Forms
             this.Controls.Add(panelBottom);
         }
 
+        private void LoadBancos()
+        {
+            var bancos = _confRepo.GetAllBancos();
+            foreach(var b in bancos)
+            {
+                _cmbBancos.Items.Add(b.NombreBanco);
+            }
+            if (_cmbBancos.Items.Count > 0) _cmbBancos.SelectedIndex = 0;
+        }
+
         private void BtnSelectFile_Click(object sender, EventArgs e)
         {
-            using (var ofd = new OpenFileDialog { Filter = "Excel/CSV|*.xlsx;*.xls;*.csv" })
+            using (var ofd = new OpenFileDialog { Filter = "Archivos|*.xlsx;*.xls;*.csv" })
             {
                 if (ofd.ShowDialog() == DialogResult.OK)
                 {
@@ -104,26 +109,23 @@ namespace ConciliadorBancario.Forms
                 MessageBox.Show("Seleccione un archivo.");
                 return;
             }
+            if (_cmbBancos.SelectedItem == null)
+            {
+                MessageBox.Show("Seleccione una configuración de banco/sistema primero.");
+                return;
+            }
 
             try
             {
+                string configName = _cmbBancos.SelectedItem.ToString();
+
                 if (_tipoFuente == "Banco")
                 {
-                    string banco = _cmbBancos.SelectedItem.ToString();
-                    // Setup default mock config if it doesn't exist
-                    var conf = _confRepo.GetConfiguracionBanco(banco);
-                    if (conf == null)
-                    {
-                         _confRepo.SaveConfiguracionBanco(new ConfiguracionBanco {
-                             NombreBanco = banco, ColumnaFecha = "Fecha", ColumnaMonto = "Monto", ColumnaConcepto = "Concepto"
-                         });
-                    }
-
-                    _movimientosPrevia = _importadorService.PrepararImportacionBanco(_txtFilePath.Text, banco);
+                    _movimientosPrevia = _importadorService.PrepararImportacionBanco(_txtFilePath.Text, configName);
                 }
                 else
                 {
-                    var conf = new ConfiguracionBanco { ColumnaFecha = "Fecha", ColumnaMonto = "Importe", ColumnaConcepto = "Concepto", ColumnaReferencia = "ID" };
+                    var conf = _confRepo.GetConfiguracionBanco(configName);
                     _movimientosPrevia = _importadorService.PrepararImportacionSistema(_txtFilePath.Text, conf);
                 }
 

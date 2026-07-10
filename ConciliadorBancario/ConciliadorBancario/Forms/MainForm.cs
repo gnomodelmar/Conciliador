@@ -39,6 +39,7 @@ namespace ConciliadorBancario.Forms
             this.Text = "Sistema de Conciliación Bancaria";
             this.Size = new Size(1200, 800);
 
+            // MenuStrip setup (must be added first or docked to top properly)
             _menuStrip = new MenuStrip();
             var menuArchivo = new ToolStripMenuItem("Archivo");
             var menuImportarBanco = new ToolStripMenuItem("Importar Banco", null, (s,e) => ImportarBanco());
@@ -99,8 +100,11 @@ namespace ConciliadorBancario.Forms
             panelBottom.Controls.Add(_btnAutoConciliar);
             panelBottom.Controls.Add(_btnExportarMasivos);
 
+            // Important: We add controls in specific order so docking doesn't overlap MenuStrip
             this.Controls.Add(splitContainer);
             this.Controls.Add(panelBottom);
+            // Ensure MenuStrip stays at top
+            _menuStrip.BringToFront();
 
             _gridBanco.CellClick += (s, e) => BuscarSimilares(e);
             _gridBanco.CellValueChanged += Grid_CellValueChanged;
@@ -122,6 +126,7 @@ namespace ConciliadorBancario.Forms
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Fecha", HeaderText = "Fecha", DataPropertyName = "FechaFormateada", ReadOnly = true, Width = 80 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Monto", HeaderText = "Monto", DataPropertyName = "MontoFormateado", ReadOnly = true, Width = 80 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Concepto", HeaderText = "Concepto", DataPropertyName = "Concepto", ReadOnly = true, Width = 150 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CodOperacion", HeaderText = "Cod. Operación", DataPropertyName = "Referencia_CodOperacion", ReadOnly = true, Width = 100 });
 
             if (isBanco)
             {
@@ -133,7 +138,7 @@ namespace ConciliadorBancario.Forms
                 Name = "Estado",
                 HeaderText = "Estado",
                 DataPropertyName = "Estado",
-                Width = 120
+                Width = 150
             };
             cmbEstado.Items.AddRange(new[] { "No encontrado", "Pendiente de corregir en sistema", "Pendiente de pasar", "Pend. Asiento Masivo", "Conciliado" });
             grid.Columns.Add(cmbEstado);

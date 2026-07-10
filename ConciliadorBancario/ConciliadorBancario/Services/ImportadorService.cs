@@ -46,12 +46,22 @@ namespace ConciliadorBancario.Services
 
                 string fechaStr = GetRowValue(row, conf.ColumnaFecha);
                 var f = DataSanitizer.ParseFecha(fechaStr);
-                if (f == null) continue;
+                if (f == null) continue; // Skip invalid rows
                 mov.Fecha = f.Value;
 
                 if (!string.IsNullOrEmpty(conf.ColumnaMonto))
                 {
                     mov.Monto = DataSanitizer.ParseMonto(GetRowValue(row, conf.ColumnaMonto));
+
+                    // Handle dynamic sign based on ColumnaTipo
+                    if (!string.IsNullOrEmpty(conf.ColumnaTipo) && !string.IsNullOrEmpty(conf.ValorTipoSalida))
+                    {
+                        string tipo = GetRowValue(row, conf.ColumnaTipo);
+                        if (tipo.Equals(conf.ValorTipoSalida, StringComparison.OrdinalIgnoreCase))
+                        {
+                            mov.Monto = -Math.Abs(mov.Monto);
+                        }
+                    }
                 }
                 else
                 {
@@ -85,6 +95,8 @@ namespace ConciliadorBancario.Services
 
         public List<Movimiento> PrepararImportacionSistema(string filePath, ConfiguracionBanco conf)
         {
+            if (conf == null) throw new Exception("Configuración no encontrada para el sistema.");
+
             DataTable dt = filePath.EndsWith(".csv") ? _excelReader.ReadCsvToDataTable(filePath) : _excelReader.ReadExcelToDataTable(filePath);
             var movimientos = new List<Movimiento>();
 
@@ -102,9 +114,30 @@ namespace ConciliadorBancario.Services
                 if (f == null) continue;
                 mov.Fecha = f.Value;
 
-                mov.Monto = DataSanitizer.ParseMonto(GetRowValue(row, conf.ColumnaMonto));
+                if (!string.IsNullOrEmpty(conf.ColumnaMonto))
+                {
+                    mov.Monto = DataSanitizer.ParseMonto(GetRowValue(row, conf.ColumnaMonto));
+
+                    if (!string.IsNullOrEmpty(conf.ColumnaTipo) && !string.IsNullOrEmpty(conf.ValorTipoSalida))
+                    {
+                        string tipo = GetRowValue(row, conf.ColumnaTipo);
+                        if (tipo.Equals(conf.ValorTipoSalida, StringComparison.OrdinalIgnoreCase))
+                        {
+                            mov.Monto = -Math.Abs(mov.Monto);
+                        }
+                    }
+                }
+                else
+                {
+                    double entrada = DataSanitizer.ParseMonto(GetRowValue(row, conf.ColumnaMontoEntrada));
+                    double salida = DataSanitizer.ParseMonto(GetRowValue(row, conf.ColumnaMontoSalida));
+                    mov.Monto = entrada > 0 ? entrada : -salida;
+                }
+
                 mov.Concepto = GetRowValue(row, conf.ColumnaConcepto);
                 mov.Referencia_CodOperacion = GetRowValue(row, conf.ColumnaReferencia);
+                // Assign bank name dynamically if it was used for System parsing
+                mov.Banco = conf.NombreBanco;
 
                 movimientos.Add(mov);
             }

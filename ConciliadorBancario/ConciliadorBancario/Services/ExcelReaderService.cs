@@ -3,43 +3,41 @@ using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
-using ClosedXML.Excel;
 using System.Text.RegularExpressions;
+using ExcelDataReader;
 
 namespace ConciliadorBancario.Services
 {
     public class ExcelReaderService
     {
+        public ExcelReaderService()
+        {
+            // Required for reading Excel 1252 encodings with ExcelDataReader on modern .NET
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+        }
+
         public DataTable ReadExcelToDataTable(string filePath)
         {
-            var dt = new DataTable();
             try
             {
-                using (var workbook = new XLWorkbook(filePath))
+                using (var stream = File.Open(filePath, FileMode.Open, FileAccess.Read))
                 {
-                    var worksheet = workbook.Worksheet(1);
-                    bool firstRow = true;
-
-                    foreach (var row in worksheet.RowsUsed())
+                    using (var reader = ExcelReaderFactory.CreateReader(stream))
                     {
-                        if (firstRow)
+                        var conf = new ExcelDataSetConfiguration
                         {
-                            foreach (var cell in row.Cells())
+                            ConfigureDataTable = _ => new ExcelDataTableConfiguration
                             {
-                                dt.Columns.Add(cell.Value.ToString().Trim());
+                                UseHeaderRow = true
                             }
-                            firstRow = false;
-                        }
-                        else
+                        };
+
+                        var dataSet = reader.AsDataSet(conf);
+                        if (dataSet.Tables.Count > 0)
                         {
-                            dt.Rows.Add();
-                            int i = 0;
-                            foreach (var cell in row.Cells(1, dt.Columns.Count))
-                            {
-                                dt.Rows[dt.Rows.Count - 1][i] = cell.Value.ToString();
-                                i++;
-                            }
+                            return dataSet.Tables[0];
                         }
+                        return new DataTable();
                     }
                 }
             }
@@ -47,7 +45,6 @@ namespace ConciliadorBancario.Services
             {
                 throw new Exception($"Error leyendo Excel: {ex.Message}");
             }
-            return dt;
         }
 
         public DataTable ReadCsvToDataTable(string filePath)
@@ -61,7 +58,6 @@ namespace ConciliadorBancario.Services
                 string firstLine = lines[0];
                 char delimiter = firstLine.Contains(";") ? ';' : ',';
 
-                // Simple regex to split by delimiter but ignore delimiters inside quotes
                 string pattern = string.Format("{0}(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", delimiter);
 
                 var headers = Regex.Split(firstLine, pattern);

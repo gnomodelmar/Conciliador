@@ -10,5 +10,7 @@ namespace ConciliadorBancario.Models
         public string ColumnaMontoSalida { get; set; }
         public string ColumnaConcepto { get; set; }
         public string ColumnaReferencia { get; set; }
+        public string ColumnaTipo { get; set; }
+        public string ValorTipoSalida { get; set; }
     }
 }

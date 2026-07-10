@@ -99,5 +99,39 @@ namespace ConciliadorBancario.Data
                 }
             }
         }
+
+        public void DeleteRegla(int reglaId)
+        {
+            using (var connection = new SQLiteConnection(DatabaseHelper.ConnectionString))
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        string q1 = "DELETE FROM ReglasAsientosDetalle WHERE ReglaId = @Id";
+                        using (var c1 = new SQLiteCommand(q1, connection, transaction))
+                        {
+                            c1.Parameters.AddWithValue("@Id", reglaId);
+                            c1.ExecuteNonQuery();
+                        }
+
+                        string q2 = "DELETE FROM ReglasAsientos WHERE Id = @Id";
+                        using (var c2 = new SQLiteCommand(q2, connection, transaction))
+                        {
+                            c2.Parameters.AddWithValue("@Id", reglaId);
+                            c2.ExecuteNonQuery();
+                        }
+
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
+                }
+            }
+        }
     }
 }
