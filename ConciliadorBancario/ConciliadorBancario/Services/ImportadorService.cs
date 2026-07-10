@@ -78,6 +78,7 @@ namespace ConciliadorBancario.Services
                     if (regla.Banco == nombreBanco && mov.Concepto.IndexOf(regla.PalabraClave, StringComparison.OrdinalIgnoreCase) >= 0)
                     {
                         mov.Estado = EstadosMovimiento.PendienteAsientoMasivo;
+                        mov.Observaciones = $"Regla AM: {regla.NombreRegla}";
                         break;
                     }
                 }
@@ -168,7 +169,6 @@ namespace ConciliadorBancario.Services
                             }
                             if (minFecha <= maxFecha)
                             {
-                                // Pass the specific bank so we don't deactivate rows from other banks
                                 _movRepo.DesactivarMovimientosSistemaPorFecha(minFecha, maxFecha, bancoRef, connection, transaction);
                             }
                         }

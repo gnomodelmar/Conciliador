@@ -74,41 +74,138 @@ namespace ConciliadorBancario.Data
             }
         }
 
-        public void UpdateEstado(int id, string nuevoEstado, string observaciones, int? matchId = null)
+        public void UpdateEstado(int id, string nuevoEstado, string observaciones, int? matchId)
         {
+            // Requires explicit matchId to prevent accidental nullification
             using (var connection = new SQLiteConnection(DatabaseHelper.ConnectionString))
             {
                 connection.Open();
-                string query = "UPDATE Movimientos SET Estado = @Estado, Observaciones = @Obs, MatchId = @MatchId WHERE Id = @Id";
-                using (var command = new SQLiteCommand(query, connection))
+                using (var transaction = connection.BeginTransaction())
                 {
-                    command.Parameters.AddWithValue("@Estado", nuevoEstado);
-                    command.Parameters.AddWithValue("@Obs", observaciones ?? (object)DBNull.Value);
-                    command.Parameters.AddWithValue("@MatchId", matchId ?? (object)DBNull.Value);
-                    command.Parameters.AddWithValue("@Id", id);
-                    command.ExecuteNonQuery();
+                    try
+                    {
+                        string query = "UPDATE Movimientos SET Estado = @Estado, Observaciones = @Obs, MatchId = @MatchId WHERE Id = @Id";
+                        using (var command = new SQLiteCommand(query, connection, transaction))
+                        {
+                            command.Parameters.AddWithValue("@Estado", nuevoEstado);
+                            command.Parameters.AddWithValue("@Obs", observaciones ?? (object)DBNull.Value);
+                            command.Parameters.AddWithValue("@MatchId", matchId ?? (object)DBNull.Value);
+                            command.Parameters.AddWithValue("@Id", id);
+                            command.ExecuteNonQuery();
+                        }
+
+                        // Handle unmatching if state changed away from Conciliado
+                        if (nuevoEstado != EstadosMovimiento.Conciliado && matchId.HasValue)
+                        {
+                            // Revert counterpart safely
+                            string revQuery = "UPDATE Movimientos SET Estado = @Estado, MatchId = NULL, Observaciones = 'Desvinculado manualmente' WHERE Id = @MId";
+                            using (var revCommand = new SQLiteCommand(revQuery, connection, transaction))
+                            {
+                                revCommand.Parameters.AddWithValue("@Estado", EstadosMovimiento.NoEncontrado);
+                                revCommand.Parameters.AddWithValue("@MId", matchId.Value);
+                                revCommand.ExecuteNonQuery();
+                            }
+
+                            // Also clear own match id just in case
+                            using (var clearCmd = new SQLiteCommand("UPDATE Movimientos SET MatchId = NULL WHERE Id = @Id", connection, transaction))
+                            {
+                                clearCmd.Parameters.AddWithValue("@Id", id);
+                                clearCmd.ExecuteNonQuery();
+                            }
+                        }
+
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
                 }
             }
         }
 
-        public void DeleteMovimiento(int id)
+        public void DeleteMovimientoAndUnmatch(int id)
         {
             using (var connection = new SQLiteConnection(DatabaseHelper.ConnectionString))
             {
                 connection.Open();
-                string query = "UPDATE Movimientos SET Activo = 0 WHERE Id = @Id";
-                using (var command = new SQLiteCommand(query, connection))
+                using (var transaction = connection.BeginTransaction())
                 {
-                    command.Parameters.AddWithValue("@Id", id);
-                    command.ExecuteNonQuery();
+                    try
+                    {
+                        int? matchId = null;
+                        using (var cmd = new SQLiteCommand("SELECT MatchId FROM Movimientos WHERE Id = @Id", connection, transaction))
+                        {
+                            cmd.Parameters.AddWithValue("@Id", id);
+                            var result = cmd.ExecuteScalar();
+                            if (result != DBNull.Value && result != null)
+                            {
+                                matchId = Convert.ToInt32(result);
+                            }
+                        }
+
+                        using (var cmd = new SQLiteCommand("UPDATE Movimientos SET Activo = 0 WHERE Id = @Id", connection, transaction))
+                        {
+                            cmd.Parameters.AddWithValue("@Id", id);
+                            cmd.ExecuteNonQuery();
+                        }
+
+                        if (matchId.HasValue)
+                        {
+                            using (var cmd = new SQLiteCommand("UPDATE Movimientos SET Estado = @NoEnc, MatchId = NULL, Observaciones = 'Desvinculado por eliminación' WHERE Id = @MId", connection, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@NoEnc", EstadosMovimiento.NoEncontrado);
+                                cmd.Parameters.AddWithValue("@MId", matchId.Value);
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
+
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
                 }
             }
         }
 
         public void DesactivarMovimientosSistemaPorFecha(DateTime fechaInicio, DateTime? fechaFin, string banco, SQLiteConnection connection, SQLiteTransaction transaction)
         {
-            string query = "UPDATE Movimientos SET Activo = 0 WHERE TipoFuente = 'Sistema' AND Banco = @Banco AND Fecha >= @Inicio AND (@Fin IS NULL OR Fecha <= @Fin)";
-            using (var command = new SQLiteCommand(query, connection, transaction))
+            // First, find all system movements that will be deactivated AND have a MatchId
+            var idsToUnmatch = new List<int>();
+            string selectQuery = "SELECT MatchId FROM Movimientos WHERE TipoFuente = 'Sistema' AND Banco = @Banco AND Fecha >= @Inicio AND (@Fin IS NULL OR Fecha <= @Fin) AND MatchId IS NOT NULL";
+            using (var cmd = new SQLiteCommand(selectQuery, connection, transaction))
+            {
+                cmd.Parameters.AddWithValue("@Inicio", fechaInicio);
+                cmd.Parameters.AddWithValue("@Fin", fechaFin ?? (object)DBNull.Value);
+                cmd.Parameters.AddWithValue("@Banco", banco);
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        idsToUnmatch.Add(Convert.ToInt32(reader["MatchId"]));
+                    }
+                }
+            }
+
+            // Release those counterpart Bank items before deactivating
+            foreach (var matchId in idsToUnmatch)
+            {
+                string revertQuery = "UPDATE Movimientos SET Estado = @Estado, MatchId = NULL, Observaciones = 'Desvinculado por recarga de sistema' WHERE Id = @Id";
+                using (var revCmd = new SQLiteCommand(revertQuery, connection, transaction))
+                {
+                    revCmd.Parameters.AddWithValue("@Estado", EstadosMovimiento.NoEncontrado);
+                    revCmd.Parameters.AddWithValue("@Id", matchId);
+                    revCmd.ExecuteNonQuery();
+                }
+            }
+
+            // Finally, deactivate the system rows
+            string updateQuery = "UPDATE Movimientos SET Activo = 0 WHERE TipoFuente = 'Sistema' AND Banco = @Banco AND Fecha >= @Inicio AND (@Fin IS NULL OR Fecha <= @Fin)";
+            using (var command = new SQLiteCommand(updateQuery, connection, transaction))
             {
                 command.Parameters.AddWithValue("@Inicio", fechaInicio);
                 command.Parameters.AddWithValue("@Fin", fechaFin ?? (object)DBNull.Value);

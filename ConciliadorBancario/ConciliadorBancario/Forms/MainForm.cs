@@ -17,9 +17,9 @@ namespace ConciliadorBancario.Forms
         private Button _btnAutoConciliar;
         private Button _btnExportarMasivos;
         private Button _btnVincular;
-        private Button _btnEliminarFila;
+        private Button _btnEliminarBanco;
+        private Button _btnEliminarSistema;
 
-        // Filters
         private ComboBox _cmbFiltroBancoEst;
         private ComboBox _cmbFiltroBancoBco;
         private DateTimePicker _dtBancoDesde;
@@ -36,6 +36,7 @@ namespace ConciliadorBancario.Forms
 
         private List<Movimiento> _allBanco;
         private List<Movimiento> _allSistema;
+        private bool _isUpdatingSelection = false;
 
         public MainForm()
         {
@@ -50,7 +51,7 @@ namespace ConciliadorBancario.Forms
         private void InitializeComponent()
         {
             this.Text = "Sistema de Conciliación Bancaria";
-            this.Size = new Size(1300, 800);
+            this.Size = new Size(1350, 800);
 
             var splitContainer = new SplitContainer();
             splitContainer.Dock = DockStyle.Fill;
@@ -62,19 +63,23 @@ namespace ConciliadorBancario.Forms
             _btnAutoConciliar = new Button { Text = "Auto-Conciliar (Coincidencia Exacta)", Location = new Point(10, 15), Width = 200 };
             _btnAutoConciliar.Click += (s, e) => { _engine.AutoConciliar(); LoadData(); MessageBox.Show("Auto-conciliación finalizada."); };
 
-            _btnExportarMasivos = new Button { Text = "Exportar Asientos Masivos", Location = new Point(220, 15), Width = 200 };
+            _btnExportarMasivos = new Button { Text = "Exportar Asientos Masivos", Location = new Point(220, 15), Width = 180 };
             _btnExportarMasivos.Click += BtnExportarMasivos_Click;
 
-            _btnVincular = new Button { Text = "Vincular Seleccionados (Match Manual)", Location = new Point(430, 15), Width = 250 };
+            _btnVincular = new Button { Text = "Vincular Seleccionados (Match Manual)", Location = new Point(410, 15), Width = 250 };
             _btnVincular.Click += BtnVincular_Click;
 
-            _btnEliminarFila = new Button { Text = "Eliminar Seleccionados", Location = new Point(690, 15), Width = 150 };
-            _btnEliminarFila.Click += BtnEliminarFila_Click;
+            _btnEliminarBanco = new Button { Text = "Eliminar Sel. Banco", Location = new Point(670, 15), Width = 150 };
+            _btnEliminarBanco.Click += (s, e) => EliminarFilas(_gridBanco);
+
+            _btnEliminarSistema = new Button { Text = "Eliminar Sel. Sistema", Location = new Point(830, 15), Width = 150 };
+            _btnEliminarSistema.Click += (s, e) => EliminarFilas(_gridSistema);
 
             panelBottom.Controls.Add(_btnAutoConciliar);
             panelBottom.Controls.Add(_btnExportarMasivos);
             panelBottom.Controls.Add(_btnVincular);
-            panelBottom.Controls.Add(_btnEliminarFila);
+            panelBottom.Controls.Add(_btnEliminarBanco);
+            panelBottom.Controls.Add(_btnEliminarSistema);
             this.Controls.Add(panelBottom);
 
             _menuStrip = new MenuStrip();
@@ -99,7 +104,7 @@ namespace ConciliadorBancario.Forms
 
             headerIzquierdo.Controls.Add(new Label { Text = "Estado:", Location = new Point(10, 35), AutoSize = true });
             _cmbFiltroBancoEst = new ComboBox { Location = new Point(60, 32), Width = 150, DropDownStyle = ComboBoxStyle.DropDownList };
-            _cmbFiltroBancoEst.Items.AddRange(new[] { "Todos", "No encontrado", "Pendiente de corregir en sistema", "Pendiente de pasar", "Pend. Asiento Masivo", "Conciliado" });
+            _cmbFiltroBancoEst.Items.AddRange(new[] { "Todos", "No encontrado", "Posible match manual", "Pendiente de corregir en sistema", "Pendiente de pasar", "Pend. Asiento Masivo", "Conciliado" });
             _cmbFiltroBancoEst.SelectedIndex = 0;
             _cmbFiltroBancoEst.SelectedIndexChanged += (s, e) => FilterData();
 
@@ -135,7 +140,7 @@ namespace ConciliadorBancario.Forms
 
             headerDerecho.Controls.Add(new Label { Text = "Estado:", Location = new Point(10, 35), AutoSize = true });
             _cmbFiltroSistEst = new ComboBox { Location = new Point(60, 32), Width = 150, DropDownStyle = ComboBoxStyle.DropDownList };
-            _cmbFiltroSistEst.Items.AddRange(new[] { "Todos", "No encontrado", "Pendiente de corregir en sistema", "Pendiente de pasar", "Pend. Asiento Masivo", "Conciliado" });
+            _cmbFiltroSistEst.Items.AddRange(new[] { "Todos", "No encontrado", "Posible match manual", "Pendiente de corregir en sistema", "Pendiente de pasar", "Pend. Asiento Masivo", "Conciliado" });
             _cmbFiltroSistEst.SelectedIndex = 0;
             _cmbFiltroSistEst.SelectedIndexChanged += (s, e) => FilterData();
 
@@ -167,7 +172,9 @@ namespace ConciliadorBancario.Forms
             splitContainer.Panel1.Controls.Add(panelIzquierdo);
             splitContainer.Panel2.Controls.Add(panelDerecho);
 
-            _gridBanco.CellClick += (s, e) => BuscarSimilares(e);
+            _gridBanco.CellClick += (s, e) => InteraccionGrilla(_gridBanco, _gridSistema, true, e);
+            _gridSistema.CellClick += (s, e) => InteraccionGrilla(_gridSistema, _gridBanco, false, e);
+
             _gridBanco.CellValueChanged += Grid_CellValueChanged;
             _gridSistema.CellValueChanged += Grid_CellValueChanged;
 
@@ -202,12 +209,12 @@ namespace ConciliadorBancario.Forms
                 AllowUserToAddRows = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
-                MultiSelect = false
+                MultiSelect = true
             };
 
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Id", DataPropertyName = "Id", Visible = false });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Fecha", HeaderText = "Fecha", DataPropertyName = "FechaFormateada", ReadOnly = true, Width = 80 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Monto", HeaderText = "Monto", DataPropertyName = "MontoFormateado", ReadOnly = true, Width = 80 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Fecha", HeaderText = "Fecha", DataPropertyName = "Fecha", ReadOnly = true, Width = 80 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Monto", HeaderText = "Monto", DataPropertyName = "Monto", ReadOnly = true, Width = 80 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Concepto", HeaderText = "Concepto", DataPropertyName = "Concepto", ReadOnly = true, Width = 150 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CodOperacion", HeaderText = "Cod. Banco", DataPropertyName = "Referencia_CodOperacion", ReadOnly = true, Width = 100 });
 
@@ -225,7 +232,7 @@ namespace ConciliadorBancario.Forms
                 DataPropertyName = "Estado",
                 Width = 150
             };
-            cmbEstado.Items.AddRange(new[] { "No encontrado", "Pendiente de corregir en sistema", "Pendiente de pasar", "Pend. Asiento Masivo", "Conciliado" });
+            cmbEstado.Items.AddRange(new[] { "No encontrado", "Posible match manual", "Pendiente de corregir en sistema", "Pendiente de pasar", "Pend. Asiento Masivo", "Conciliado" });
             grid.Columns.Add(cmbEstado);
 
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Observaciones", HeaderText = "Observaciones", DataPropertyName = "Observaciones", Width = 150 });
@@ -242,7 +249,7 @@ namespace ConciliadorBancario.Forms
 
         private void FilterData()
         {
-            if (_allBanco == null || _allSistema == null) return;
+            if (_allBanco == null || _allSistema == null || _isUpdatingSelection) return;
 
             string estadoBco = _cmbFiltroBancoEst.SelectedItem?.ToString() ?? "Todos";
             string bancoBco = _cmbFiltroBancoBco.SelectedItem?.ToString() ?? "Todos";
@@ -266,29 +273,59 @@ namespace ConciliadorBancario.Forms
                 m.Fecha.Date >= desdeSis && m.Fecha.Date <= hastaSis
             ).ToList();
 
-            _gridBanco.DataSource = new System.ComponentModel.BindingList<Movimiento>(bancoList);
-            _gridSistema.DataSource = new System.ComponentModel.BindingList<Movimiento>(sistemaList);
+            _gridBanco.DataSource = new SortableBindingList<Movimiento>(bancoList);
+            _gridSistema.DataSource = new SortableBindingList<Movimiento>(sistemaList);
         }
 
-        private void BuscarSimilares(DataGridViewCellEventArgs e)
+        private void InteraccionGrilla(DataGridView sourceGrid, DataGridView targetGrid, bool isSourceBanco, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0) return;
-            var movBanco = _gridBanco.Rows[e.RowIndex].DataBoundItem as Movimiento;
-            if (movBanco == null || movBanco.Estado != "No encontrado") return;
+            var movSource = sourceGrid.Rows[e.RowIndex].DataBoundItem as Movimiento;
+            if (movSource == null) return;
 
-            var candidatos = _engine.ObtenerCandidatosFuzzy(movBanco, _allSistema.Where(s => s.Estado == "No encontrado").ToList());
-
-            if (candidatos.Count > 0)
+            try
             {
-                if (_cmbFiltroSistEst.SelectedIndex != 1)
+                if (movSource.Estado == EstadosMovimiento.Conciliado && movSource.MatchId.HasValue)
                 {
-                    _cmbFiltroSistEst.SelectedIndexChanged -= (s, ev) => FilterData();
-                    _cmbFiltroSistEst.SelectedIndex = 1; // "No encontrado"
-                    _cmbFiltroSistEst.SelectedIndexChanged += (s, ev) => FilterData();
-                }
+                    ComboBox targetComboEst = isSourceBanco ? _cmbFiltroSistEst : _cmbFiltroBancoEst;
+                    if (targetComboEst.SelectedIndex != 0 && targetComboEst.SelectedItem.ToString() != EstadosMovimiento.Conciliado)
+                    {
+                        // Temporarily bypass the FilterData update guard so the visual list actually refreshes
+                        _isUpdatingSelection = false;
+                        targetComboEst.SelectedIndex = 0;
+                        FilterData();
+                        _isUpdatingSelection = true; // Reinstate guard
+                    }
 
-                var bindingList = new System.ComponentModel.BindingList<Movimiento>(candidatos);
-                _gridSistema.DataSource = bindingList;
+                    targetGrid.ClearSelection();
+                    foreach (DataGridViewRow row in targetGrid.Rows)
+                    {
+                        var m = row.DataBoundItem as Movimiento;
+                        if (m != null && m.Id == movSource.MatchId.Value)
+                        {
+                            row.Selected = true;
+                            targetGrid.FirstDisplayedScrollingRowIndex = row.Index;
+                            break;
+                        }
+                    }
+                }
+                else if (isSourceBanco && (movSource.Estado == EstadosMovimiento.NoEncontrado || movSource.Estado == EstadosMovimiento.PosibleMatch))
+                {
+                    _isUpdatingSelection = true;
+                    var candidatos = _engine.ObtenerCandidatosFuzzy(movSource, _allSistema.Where(s => s.Estado == EstadosMovimiento.NoEncontrado || s.Estado == EstadosMovimiento.PosibleMatch).ToList());
+                    if (candidatos.Count > 0)
+                    {
+                        if (_cmbFiltroSistEst.SelectedIndex != 0)
+                        {
+                            _cmbFiltroSistEst.SelectedIndex = 0;
+                        }
+                        targetGrid.DataSource = new SortableBindingList<Movimiento>(candidatos);
+                    }
+                }
+            }
+            finally
+            {
+                _isUpdatingSelection = false;
             }
         }
 
@@ -311,22 +348,25 @@ namespace ConciliadorBancario.Forms
             }
         }
 
-        private void BtnEliminarFila_Click(object sender, EventArgs e)
+        private void EliminarFilas(DataGridView grid)
         {
-            var selectedBanco = _gridBanco.SelectedRows.Count > 0 ? _gridBanco.SelectedRows[0].DataBoundItem as Movimiento : null;
-            var selectedSist = _gridSistema.SelectedRows.Count > 0 ? _gridSistema.SelectedRows[0].DataBoundItem as Movimiento : null;
-
-            if (selectedBanco == null && selectedSist == null)
+            if (grid.SelectedRows.Count == 0)
             {
-                MessageBox.Show("Seleccione una fila en el Banco o en el Sistema para eliminar.");
+                MessageBox.Show("Seleccione al menos una fila para eliminar.");
                 return;
             }
 
-            var res = MessageBox.Show("¿Está seguro que desea eliminar lógicamente los movimientos seleccionados?", "Confirmar", MessageBoxButtons.YesNo);
+            var res = MessageBox.Show($"¿Está seguro que desea eliminar lógicamente {grid.SelectedRows.Count} movimiento(s)? Si estaban vinculados, su contraparte volverá a estado 'No encontrado'.", "Confirmar Eliminación", MessageBoxButtons.YesNo);
             if (res == DialogResult.Yes)
             {
-                if (selectedBanco != null) _movRepo.DeleteMovimiento(selectedBanco.Id);
-                if (selectedSist != null) _movRepo.DeleteMovimiento(selectedSist.Id);
+                foreach(DataGridViewRow row in grid.SelectedRows)
+                {
+                    var mov = row.DataBoundItem as Movimiento;
+                    if (mov != null)
+                    {
+                        _movRepo.DeleteMovimientoAndUnmatch(mov.Id);
+                    }
+                }
                 LoadData();
             }
         }
@@ -338,7 +378,14 @@ namespace ConciliadorBancario.Forms
             var mov = grid.Rows[e.RowIndex].DataBoundItem as Movimiento;
             if (mov != null)
             {
-                _movRepo.UpdateEstado(mov.Id, mov.Estado, mov.Observaciones);
+                // Explicitly pass MatchId so we don't accidentally wipe it
+                _movRepo.UpdateEstado(mov.Id, mov.Estado, mov.Observaciones, mov.MatchId);
+
+                // If it was changed manually via the dropdown away from Conciliado, trigger UI refresh to unmatch
+                if (mov.Estado != EstadosMovimiento.Conciliado && mov.MatchId.HasValue)
+                {
+                    LoadData();
+                }
             }
         }
 
@@ -375,14 +422,9 @@ namespace ConciliadorBancario.Forms
 
         private void BtnExportarMasivos_Click(object sender, EventArgs e)
         {
-            using (var sfd = new SaveFileDialog() { Filter = "CSV|*.csv|Excel|*.xlsx", FileName = "AsientosMasivos.csv" })
+            using (var form = new ExportarAMForm())
             {
-                if (sfd.ShowDialog() == DialogResult.OK)
-                {
-                    var exportService = new AsientoMasivoExportService();
-                    exportService.ExportarAsientosMasivos(sfd.FileName);
-                    MessageBox.Show("Exportación exitosa.");
-                }
+                form.ShowDialog();
             }
         }
     }

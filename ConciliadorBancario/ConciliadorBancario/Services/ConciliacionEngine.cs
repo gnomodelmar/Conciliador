@@ -24,7 +24,6 @@ namespace ConciliadorBancario.Services
             {
                 if (banco.Estado == EstadosMovimiento.PendienteAsientoMasivo) continue;
 
-                // Regular match exacto (misma fecha, mismo monto)
                 var match = sistemas.FirstOrDefault(s =>
                     Math.Abs(s.Monto - banco.Monto) < 0.01 &&
                     s.Fecha.Date == banco.Fecha.Date &&
@@ -32,13 +31,11 @@ namespace ConciliadorBancario.Services
 
                 if (match != null)
                 {
-                    MarcarConciliado(banco, match, "Auto Match Exacto");
+                    MarcarConciliado(banco, match, $"Auto Match Exacto Sist:[{match.CodOperacionSistema}] Banco:[{banco.Referencia_CodOperacion}]");
                     sistemas.Remove(match);
                 }
             }
 
-            // Asientos Masivos Match
-            // User requested EXACT date match for AM because they are generated with the exact date from the bank
             bancos = _movRepo.GetPendientes("Banco");
             var masivosSistema = sistemas.Where(s => s.Concepto != null && s.Concepto.Contains("[AM-")).ToList();
 
@@ -47,27 +44,38 @@ namespace ConciliadorBancario.Services
                 var bancoMatch = bancos.FirstOrDefault(b =>
                     b.Estado == EstadosMovimiento.PendienteAsientoMasivo &&
                     Math.Abs(sys.Monto - b.Monto) < 0.01 &&
-                    b.Fecha.Date == sys.Fecha.Date); // EXACT Date match
+                    b.Fecha.Date == sys.Fecha.Date);
 
                 if(bancoMatch != null)
                 {
-                    MarcarConciliado(bancoMatch, sys, "Auto Match Asiento Masivo");
+                    MarcarConciliado(bancoMatch, sys, $"Auto Match Asiento Masivo Sist:[{sys.CodOperacionSistema}]");
                     bancos.Remove(bancoMatch);
+                }
+            }
+
+            bancos = _movRepo.GetPendientes("Banco");
+            foreach (var banco in bancos)
+            {
+                if (banco.Estado == EstadosMovimiento.NoEncontrado)
+                {
+                    var posibles = ObtenerCandidatosFuzzy(banco, sistemas);
+                    if (posibles.Count > 0)
+                    {
+                        _movRepo.UpdateEstado(banco.Id, EstadosMovimiento.PosibleMatch, "Se detectaron posibles matches manuales", null);
+                    }
                 }
             }
         }
 
         public List<Movimiento> ObtenerCandidatosFuzzy(Movimiento origen, List<Movimiento> posibles)
         {
-            // Fuzzy match for MANUAL linking.
-            // Allows up to 7 days difference for same amount (e.g. accounting entry delayed from bank date).
-            // Or same date but up to 1 dollar difference.
             return posibles.Where(p =>
-                p.Estado == EstadosMovimiento.NoEncontrado &&
+                (p.Estado == EstadosMovimiento.NoEncontrado || p.Estado == EstadosMovimiento.PosibleMatch) &&
                 ((Math.Abs(p.Monto - origen.Monto) < 0.01 && Math.Abs((p.Fecha - origen.Fecha).TotalDays) <= 7) ||
                  (Math.Abs(p.Monto - origen.Monto) <= 1.00 && p.Fecha.Date == origen.Fecha.Date))
                 )
-                .OrderBy(p => Math.Abs(p.Monto - origen.Monto))
+                .OrderByDescending(p => p.Banco == origen.Banco)
+                .ThenBy(p => Math.Abs(p.Monto - origen.Monto))
                 .ThenBy(p => Math.Abs((p.Fecha - origen.Fecha).TotalDays))
                 .ToList();
         }

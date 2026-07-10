@@ -29,5 +29,6 @@ namespace ConciliadorBancario.Models
         public const string PendientePasar = "Pendiente de pasar";
         public const string PendienteAsientoMasivo = "Pend. Asiento Masivo";
         public const string Conciliado = "Conciliado";
+        public const string PosibleMatch = "Posible match manual";
     }
 }

@@ -20,7 +20,7 @@ namespace ConciliadorBancario.Services
             _reglasRepo = new ReglasRepository();
         }
 
-        public void ExportarAsientosMasivos(string filePath)
+        public void ExportarAsientosMasivos(string filePath, int? reglaId = null)
         {
             var pendientesAM = _movRepo.GetPendientes("Banco")
                 .Where(m => m.Estado == EstadosMovimiento.PendienteAsientoMasivo)
@@ -29,6 +29,11 @@ namespace ConciliadorBancario.Services
             if (pendientesAM.Count == 0) return;
 
             var reglas = _reglasRepo.GetAllReglas();
+            if (reglaId.HasValue)
+            {
+                reglas = reglas.Where(r => r.Id == reglaId.Value).ToList();
+            }
+
             var dt = new DataTable();
             dt.Columns.Add("Fecha");
             dt.Columns.Add("Tipo");
@@ -42,7 +47,7 @@ namespace ConciliadorBancario.Services
 
             foreach (var mov in pendientesAM)
             {
-                // Find matching rule
+                // Find matching rule based on what was saved in Observaciones or Concepto
                 var rule = reglas.FirstOrDefault(r =>
                     r.Banco == mov.Banco &&
                     mov.Concepto.IndexOf(r.PalabraClave, StringComparison.OrdinalIgnoreCase) >= 0);
