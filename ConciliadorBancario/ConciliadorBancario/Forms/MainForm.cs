@@ -178,6 +178,9 @@ namespace ConciliadorBancario.Forms
             _gridBanco.CellValueChanged += Grid_CellValueChanged;
             _gridSistema.CellValueChanged += Grid_CellValueChanged;
 
+            _gridBanco.CellFormatting += Grid_CellFormatting;
+            _gridSistema.CellFormatting += Grid_CellFormatting;
+
             LoadBancosDropdown();
         }
 
@@ -290,11 +293,10 @@ namespace ConciliadorBancario.Forms
                     ComboBox targetComboEst = isSourceBanco ? _cmbFiltroSistEst : _cmbFiltroBancoEst;
                     if (targetComboEst.SelectedIndex != 0 && targetComboEst.SelectedItem.ToString() != EstadosMovimiento.Conciliado)
                     {
-                        // Temporarily bypass the FilterData update guard so the visual list actually refreshes
                         _isUpdatingSelection = false;
                         targetComboEst.SelectedIndex = 0;
                         FilterData();
-                        _isUpdatingSelection = true; // Reinstate guard
+                        _isUpdatingSelection = true;
                     }
 
                     targetGrid.ClearSelection();
@@ -326,6 +328,36 @@ namespace ConciliadorBancario.Forms
             finally
             {
                 _isUpdatingSelection = false;
+            }
+        }
+
+        private void Grid_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            if (e.RowIndex >= 0 && e.RowIndex < ((DataGridView)sender).Rows.Count)
+            {
+                var mov = ((DataGridView)sender).Rows[e.RowIndex].DataBoundItem as Movimiento;
+                if (mov != null)
+                {
+                    switch (mov.Estado)
+                    {
+                        case EstadosMovimiento.Conciliado:
+                            e.CellStyle.BackColor = Color.LightGreen;
+                            break;
+                        case EstadosMovimiento.PosibleMatch:
+                            e.CellStyle.BackColor = Color.LightYellow;
+                            break;
+                        case EstadosMovimiento.PendienteAsientoMasivo:
+                            e.CellStyle.BackColor = Color.LightCyan;
+                            break;
+                        case EstadosMovimiento.PendienteCorregir:
+                        case EstadosMovimiento.PendientePasar:
+                            e.CellStyle.BackColor = Color.LightCoral;
+                            break;
+                        default:
+                            e.CellStyle.BackColor = Color.White;
+                            break;
+                    }
+                }
             }
         }
 
@@ -378,10 +410,8 @@ namespace ConciliadorBancario.Forms
             var mov = grid.Rows[e.RowIndex].DataBoundItem as Movimiento;
             if (mov != null)
             {
-                // Explicitly pass MatchId so we don't accidentally wipe it
                 _movRepo.UpdateEstado(mov.Id, mov.Estado, mov.Observaciones, mov.MatchId);
 
-                // If it was changed manually via the dropdown away from Conciliado, trigger UI refresh to unmatch
                 if (mov.Estado != EstadosMovimiento.Conciliado && mov.MatchId.HasValue)
                 {
                     LoadData();

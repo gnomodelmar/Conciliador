@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using ConciliadorBancario.Data;
 using ConciliadorBancario.Models;
 
@@ -24,7 +25,29 @@ namespace ConciliadorBancario.Services
             {
                 if (banco.Estado == EstadosMovimiento.PendienteAsientoMasivo) continue;
 
-                var match = sistemas.FirstOrDefault(s =>
+                // 1. Auto-Match by Operation Code & Amount (Bypasses date requirement, ignores leading zeros)
+                Movimiento match = null;
+                if (!string.IsNullOrWhiteSpace(banco.Referencia_CodOperacion))
+                {
+                    string cleanBancoCod = banco.Referencia_CodOperacion.TrimStart('0');
+                    if (string.IsNullOrEmpty(cleanBancoCod)) cleanBancoCod = "0"; // In case it was just "0000"
+
+                    match = sistemas.FirstOrDefault(s =>
+                        !string.IsNullOrWhiteSpace(s.CodOperacionSistema) &&
+                        s.CodOperacionSistema.TrimStart('0').Equals(cleanBancoCod, StringComparison.OrdinalIgnoreCase) &&
+                        Math.Abs(s.Monto - banco.Monto) < 0.01 &&
+                        s.Estado == EstadosMovimiento.NoEncontrado);
+
+                    if (match != null)
+                    {
+                        MarcarConciliado(banco, match, $"Auto Match por Cód. Operación Sist:[{match.CodOperacionSistema}] Banco:[{banco.Referencia_CodOperacion}]");
+                        sistemas.Remove(match);
+                        continue; // Go to next bank item
+                    }
+                }
+
+                // 2. Regular auto-match (misma fecha, mismo monto)
+                match = sistemas.FirstOrDefault(s =>
                     Math.Abs(s.Monto - banco.Monto) < 0.01 &&
                     s.Fecha.Date == banco.Fecha.Date &&
                     s.Estado == EstadosMovimiento.NoEncontrado);
@@ -36,6 +59,7 @@ namespace ConciliadorBancario.Services
                 }
             }
 
+            // Asientos Masivos Match
             bancos = _movRepo.GetPendientes("Banco");
             var masivosSistema = sistemas.Where(s => s.Concepto != null && s.Concepto.Contains("[AM-")).ToList();
 
@@ -69,15 +93,49 @@ namespace ConciliadorBancario.Services
 
         public List<Movimiento> ObtenerCandidatosFuzzy(Movimiento origen, List<Movimiento> posibles)
         {
+            var origenWords = GetSignificantWords(origen.Concepto);
+
             return posibles.Where(p =>
                 (p.Estado == EstadosMovimiento.NoEncontrado || p.Estado == EstadosMovimiento.PosibleMatch) &&
                 ((Math.Abs(p.Monto - origen.Monto) < 0.01 && Math.Abs((p.Fecha - origen.Fecha).TotalDays) <= 7) ||
                  (Math.Abs(p.Monto - origen.Monto) <= 1.00 && p.Fecha.Date == origen.Fecha.Date))
                 )
-                .OrderByDescending(p => p.Banco == origen.Banco)
+                // 1. Order by Concept Word Overlap Count (Higher is better)
+                .OrderByDescending(p => CountWordOverlap(origenWords, p.Concepto))
+                // 2. Order by Bank tag match
+                .ThenByDescending(p => p.Banco == origen.Banco)
+                // 3. Order by Amount difference
                 .ThenBy(p => Math.Abs(p.Monto - origen.Monto))
+                // 4. Order by Date difference
                 .ThenBy(p => Math.Abs((p.Fecha - origen.Fecha).TotalDays))
                 .ToList();
+        }
+
+        private HashSet<string> GetSignificantWords(string text)
+        {
+            var words = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(text)) return words;
+
+            // Extract words with 3 or more characters (letters/numbers)
+            var matches = Regex.Matches(text, @"\b\w{3,}\b");
+            foreach (Match match in matches)
+            {
+                words.Add(match.Value);
+            }
+            return words;
+        }
+
+        private int CountWordOverlap(HashSet<string> targetWords, string textToTest)
+        {
+            if (string.IsNullOrWhiteSpace(textToTest) || targetWords.Count == 0) return 0;
+
+            var testWords = GetSignificantWords(textToTest);
+            int overlap = 0;
+            foreach(var w in testWords)
+            {
+                if (targetWords.Contains(w)) overlap++;
+            }
+            return overlap;
         }
 
         public void MarcarConciliado(Movimiento banco, Movimiento sistema, string obs)
