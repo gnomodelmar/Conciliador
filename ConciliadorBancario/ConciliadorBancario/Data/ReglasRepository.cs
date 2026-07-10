@@ -68,13 +68,36 @@ namespace ConciliadorBancario.Data
                 {
                     try
                     {
-                        string qInsertRegla = "INSERT INTO ReglasAsientos (NombreRegla, PalabraClave, Banco) VALUES (@N, @P, @B); SELECT last_insert_rowid();";
-                        using (var cmd = new SQLiteCommand(qInsertRegla, connection, transaction))
+                        if (regla.Id == 0)
                         {
-                            cmd.Parameters.AddWithValue("@N", regla.NombreRegla);
-                            cmd.Parameters.AddWithValue("@P", regla.PalabraClave);
-                            cmd.Parameters.AddWithValue("@B", regla.Banco);
-                            regla.Id = Convert.ToInt32(cmd.ExecuteScalar());
+                            string qInsertRegla = "INSERT INTO ReglasAsientos (NombreRegla, PalabraClave, Banco) VALUES (@N, @P, @B); SELECT last_insert_rowid();";
+                            using (var cmd = new SQLiteCommand(qInsertRegla, connection, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@N", regla.NombreRegla);
+                                cmd.Parameters.AddWithValue("@P", regla.PalabraClave);
+                                cmd.Parameters.AddWithValue("@B", regla.Banco);
+                                regla.Id = Convert.ToInt32(cmd.ExecuteScalar());
+                            }
+                        }
+                        else
+                        {
+                            string qUpdateRegla = "UPDATE ReglasAsientos SET NombreRegla=@N, PalabraClave=@P, Banco=@B WHERE Id=@Id;";
+                            using (var cmd = new SQLiteCommand(qUpdateRegla, connection, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@N", regla.NombreRegla);
+                                cmd.Parameters.AddWithValue("@P", regla.PalabraClave);
+                                cmd.Parameters.AddWithValue("@B", regla.Banco);
+                                cmd.Parameters.AddWithValue("@Id", regla.Id);
+                                cmd.ExecuteNonQuery();
+                            }
+
+                            // Delete old details to replace them
+                            string qDelDet = "DELETE FROM ReglasAsientosDetalle WHERE ReglaId=@Id;";
+                            using (var cmd = new SQLiteCommand(qDelDet, connection, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@Id", regla.Id);
+                                cmd.ExecuteNonQuery();
+                            }
                         }
 
                         foreach (var det in regla.Detalles)

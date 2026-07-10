@@ -16,6 +16,11 @@ namespace ConciliadorBancario.Forms
         private DataGridView _gridReglas;
         private ComboBox _cmbBancoReglas;
 
+        private int _currentReglaId = 0;
+        private TextBox _txtNombreRegla;
+        private TextBox _txtPalabraClave;
+        private System.ComponentModel.BindingList<ReglaAsientoDetalle> _bindingListDetalles;
+
         public ConfiguracionForm()
         {
             _confRepo = new ConfiguracionRepository();
@@ -82,20 +87,32 @@ namespace ConciliadorBancario.Forms
             _gridReglas.Columns.Add(new DataGridViewTextBoxColumn { Name = "NombreRegla", DataPropertyName = "NombreRegla", HeaderText = "Nombre", Width = 150 });
             _gridReglas.Columns.Add(new DataGridViewTextBoxColumn { Name = "Banco", DataPropertyName = "Banco", HeaderText = "Banco", Width = 100 });
 
+            _gridReglas.CellClick += GridReglas_CellClick;
+
             var btnEliminarRegla = new Button { Text = "Eliminar Regla Seleccionada", Dock = DockStyle.Bottom };
             btnEliminarRegla.Click += BtnEliminarRegla_Click;
+
+            var btnNuevaRegla = new Button { Text = "Crear Nueva Regla (Limpiar)", Dock = DockStyle.Bottom };
+            btnNuevaRegla.Click += (s, e) => {
+                 _currentReglaId = 0;
+                 _txtNombreRegla.Clear();
+                 _txtPalabraClave.Clear();
+                 _bindingListDetalles.Clear();
+            };
+
             panelReglasIzquierdo.Controls.Add(_gridReglas);
+            panelReglasIzquierdo.Controls.Add(btnNuevaRegla);
             panelReglasIzquierdo.Controls.Add(btnEliminarRegla);
 
-            // Right Panel (Create rule)
+            // Right Panel (Create/Edit rule)
             var panelReglasDerecho = new Panel { Dock = DockStyle.Fill };
 
-            var lblTituloCreate = new Label { Text = "Crear Nueva Regla", Location = new Point(10, 10), Font = new Font("Arial", 10, FontStyle.Bold), AutoSize = true };
+            var lblTituloCreate = new Label { Text = "Editor de Regla", Location = new Point(10, 10), Font = new Font("Arial", 10, FontStyle.Bold), AutoSize = true };
             var lblNombre = new Label { Text = "Nombre Regla:", Location = new Point(10, 40), Width = 100 };
-            var txtNombre = new TextBox { Location = new Point(120, 40), Width = 200 };
+            _txtNombreRegla = new TextBox { Location = new Point(120, 40), Width = 200 };
 
             var lblPalabra = new Label { Text = "Palabra Clave:", Location = new Point(10, 70), Width = 100 };
-            var txtPalabra = new TextBox { Location = new Point(120, 70), Width = 200 };
+            _txtPalabraClave = new TextBox { Location = new Point(120, 70), Width = 200 };
 
             var lblBanco = new Label { Text = "Banco:", Location = new Point(10, 100), Width = 100 };
             _cmbBancoReglas = new ComboBox { Location = new Point(120, 100), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
@@ -114,12 +131,12 @@ namespace ConciliadorBancario.Forms
             gridDetalles.Columns.Add(new DataGridViewTextBoxColumn { Name = "IdCuenta", DataPropertyName = "IdCuenta", HeaderText = "ID Cuenta" });
             gridDetalles.Columns.Add(new DataGridViewTextBoxColumn { Name = "ConceptoTemplate", DataPropertyName = "ConceptoTemplate", HeaderText = "Concepto Template", Width = 300 });
 
-            var bindingListDetalles = new System.ComponentModel.BindingList<ReglaAsientoDetalle>();
-            gridDetalles.DataSource = bindingListDetalles;
+            _bindingListDetalles = new System.ComponentModel.BindingList<ReglaAsientoDetalle>();
+            gridDetalles.DataSource = _bindingListDetalles;
 
             var btnGuardarRegla = new Button { Text = "Guardar Regla", Location = new Point(10, 400), Width = 150 };
             btnGuardarRegla.Click += (s, e) => {
-                if (string.IsNullOrWhiteSpace(txtNombre.Text) || string.IsNullOrWhiteSpace(txtPalabra.Text) || _cmbBancoReglas.SelectedItem == null)
+                if (string.IsNullOrWhiteSpace(_txtNombreRegla.Text) || string.IsNullOrWhiteSpace(_txtPalabraClave.Text) || _cmbBancoReglas.SelectedItem == null)
                 {
                     MessageBox.Show("Debe completar Nombre, Palabra Clave y Banco.");
                     return;
@@ -127,19 +144,21 @@ namespace ConciliadorBancario.Forms
 
                 var regla = new ReglaAsiento
                 {
-                    NombreRegla = txtNombre.Text,
-                    PalabraClave = txtPalabra.Text,
+                    Id = _currentReglaId,
+                    NombreRegla = _txtNombreRegla.Text,
+                    PalabraClave = _txtPalabraClave.Text,
                     Banco = _cmbBancoReglas.SelectedItem.ToString(),
-                    Detalles = new List<ReglaAsientoDetalle>(bindingListDetalles)
+                    Detalles = new List<ReglaAsientoDetalle>(_bindingListDetalles)
                 };
 
                 try
                 {
                     _reglasRepo.SaveRegla(regla);
                     MessageBox.Show("Regla guardada correctamente.");
-                    bindingListDetalles.Clear();
-                    txtNombre.Clear();
-                    txtPalabra.Clear();
+                    _currentReglaId = 0;
+                    _bindingListDetalles.Clear();
+                    _txtNombreRegla.Clear();
+                    _txtPalabraClave.Clear();
                     LoadReglas();
                 }
                 catch(Exception ex)
@@ -150,9 +169,9 @@ namespace ConciliadorBancario.Forms
 
             panelReglasDerecho.Controls.Add(lblTituloCreate);
             panelReglasDerecho.Controls.Add(lblNombre);
-            panelReglasDerecho.Controls.Add(txtNombre);
+            panelReglasDerecho.Controls.Add(_txtNombreRegla);
             panelReglasDerecho.Controls.Add(lblPalabra);
-            panelReglasDerecho.Controls.Add(txtPalabra);
+            panelReglasDerecho.Controls.Add(_txtPalabraClave);
             panelReglasDerecho.Controls.Add(lblBanco);
             panelReglasDerecho.Controls.Add(_cmbBancoReglas);
             panelReglasDerecho.Controls.Add(lblAyuda);
@@ -188,6 +207,27 @@ namespace ConciliadorBancario.Forms
         {
             var reglas = _reglasRepo.GetAllReglas();
             _gridReglas.DataSource = new System.ComponentModel.BindingList<ReglaAsiento>(reglas);
+        }
+
+        private void GridReglas_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= 0)
+            {
+                var regla = _gridReglas.Rows[e.RowIndex].DataBoundItem as ReglaAsiento;
+                if (regla != null)
+                {
+                    _currentReglaId = regla.Id;
+                    _txtNombreRegla.Text = regla.NombreRegla;
+                    _txtPalabraClave.Text = regla.PalabraClave;
+                    _cmbBancoReglas.SelectedItem = regla.Banco;
+
+                    _bindingListDetalles.Clear();
+                    foreach (var det in regla.Detalles)
+                    {
+                        _bindingListDetalles.Add(det);
+                    }
+                }
+            }
         }
 
         private void BtnSaveBancos_Click(object sender, EventArgs e)

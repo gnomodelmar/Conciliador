@@ -16,6 +16,7 @@ namespace ConciliadorBancario.Forms
         private DataGridView _gridSistema;
         private Button _btnAutoConciliar;
         private Button _btnExportarMasivos;
+        private Button _btnVincular;
         private ComboBox _cmbFiltroBanco;
         private ComboBox _cmbFiltroSistema;
 
@@ -39,8 +40,33 @@ namespace ConciliadorBancario.Forms
             this.Text = "Sistema de Conciliación Bancaria";
             this.Size = new Size(1200, 800);
 
-            // MenuStrip setup
+            // To ensure correct z-order and layout in WinForms when using Dock properties:
+            // Controls added FIRST (index 0) are evaluated LAST for docking space.
+            // Therefore, the Fill container must be added first, and the Top/Bottom containers added after.
+
+            var splitContainer = new SplitContainer();
+            splitContainer.Dock = DockStyle.Fill;
+            splitContainer.Orientation = Orientation.Vertical;
+            splitContainer.SplitterDistance = 600;
+            this.Controls.Add(splitContainer); // Added FIRST (will get Fill priority evaluated last)
+
+            var panelBottom = new Panel { Dock = DockStyle.Bottom, Height = 60 };
+            _btnAutoConciliar = new Button { Text = "Auto-Conciliar (Coincidencia Exacta)", Location = new Point(10, 15), Width = 200 };
+            _btnAutoConciliar.Click += (s, e) => { _engine.AutoConciliar(); LoadData(); MessageBox.Show("Auto-conciliación finalizada."); };
+
+            _btnExportarMasivos = new Button { Text = "Exportar Asientos Masivos", Location = new Point(220, 15), Width = 200 };
+            _btnExportarMasivos.Click += BtnExportarMasivos_Click;
+
+            _btnVincular = new Button { Text = "Vincular Seleccionados (Match Manual)", Location = new Point(430, 15), Width = 250 };
+            _btnVincular.Click += BtnVincular_Click;
+
+            panelBottom.Controls.Add(_btnAutoConciliar);
+            panelBottom.Controls.Add(_btnExportarMasivos);
+            panelBottom.Controls.Add(_btnVincular);
+            this.Controls.Add(panelBottom);
+
             _menuStrip = new MenuStrip();
+            _menuStrip.Dock = DockStyle.Top;
             var menuArchivo = new ToolStripMenuItem("Archivo");
             var menuImportarBanco = new ToolStripMenuItem("Importar Banco", null, (s,e) => ImportarBanco());
             var menuImportarSistema = new ToolStripMenuItem("Importar Sistema", null, (s,e) => ImportarSistema());
@@ -52,12 +78,7 @@ namespace ConciliadorBancario.Forms
             menuArchivo.DropDownItems.Add(menuConfiguracion);
             _menuStrip.Items.Add(menuArchivo);
             this.MainMenuStrip = _menuStrip;
-            this.Controls.Add(_menuStrip);
-
-            var splitContainer = new SplitContainer();
-            splitContainer.Dock = DockStyle.Fill;
-            splitContainer.Orientation = Orientation.Vertical;
-            splitContainer.SplitterDistance = 600;
+            this.Controls.Add(_menuStrip); // Added LAST (will get Top priority evaluated first)
 
             var panelIzquierdo = new Panel { Dock = DockStyle.Fill };
             var headerIzquierdo = new Panel { Dock = DockStyle.Top, Height = 60 };
@@ -90,20 +111,6 @@ namespace ConciliadorBancario.Forms
             splitContainer.Panel1.Controls.Add(panelIzquierdo);
             splitContainer.Panel2.Controls.Add(panelDerecho);
 
-            var panelBottom = new Panel { Dock = DockStyle.Bottom, Height = 50 };
-            _btnAutoConciliar = new Button { Text = "Auto-Conciliar", Location = new Point(10, 10), Width = 120 };
-            _btnAutoConciliar.Click += (s, e) => { _engine.AutoConciliar(); LoadData(); MessageBox.Show("Auto-conciliación finalizada."); };
-
-            _btnExportarMasivos = new Button { Text = "Exportar Asientos Masivos", Location = new Point(150, 10), Width = 200 };
-            _btnExportarMasivos.Click += BtnExportarMasivos_Click;
-
-            panelBottom.Controls.Add(_btnAutoConciliar);
-            panelBottom.Controls.Add(_btnExportarMasivos);
-
-            this.Controls.Add(splitContainer);
-            this.Controls.Add(panelBottom);
-            _menuStrip.BringToFront();
-
             _gridBanco.CellClick += (s, e) => BuscarSimilares(e);
             _gridBanco.CellValueChanged += Grid_CellValueChanged;
             _gridSistema.CellValueChanged += Grid_CellValueChanged;
@@ -117,7 +124,8 @@ namespace ConciliadorBancario.Forms
                 AutoGenerateColumns = false,
                 AllowUserToAddRows = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2
+                EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
+                MultiSelect = false
             };
 
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Id", DataPropertyName = "Id", Visible = false });
@@ -131,10 +139,7 @@ namespace ConciliadorBancario.Forms
                 grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CodOperacionSistema", HeaderText = "Cod. Sistema", DataPropertyName = "CodOperacionSistema", ReadOnly = true, Width = 100 });
             }
 
-            if (isBanco)
-            {
-                grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Banco", HeaderText = "Banco", DataPropertyName = "Banco", ReadOnly = true, Width = 80 });
-            }
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Banco", HeaderText = "Banco", DataPropertyName = "Banco", ReadOnly = true, Width = 80 });
 
             var cmbEstado = new DataGridViewComboBoxColumn
             {
@@ -182,9 +187,37 @@ namespace ConciliadorBancario.Forms
 
             if (candidatos.Count > 0)
             {
+                // Set the dropdown index FIRST so it triggers FilterData,
+                // and then we assign our custom fuzzy list to override it.
+                // This prevents FilterData from wiping out our custom candidates.
+                if (_cmbFiltroSistema.SelectedIndex != 1)
+                {
+                    _cmbFiltroSistema.SelectedIndexChanged -= (s, ev) => FilterData();
+                    _cmbFiltroSistema.SelectedIndex = 1; // "No encontrado"
+                    _cmbFiltroSistema.SelectedIndexChanged += (s, ev) => FilterData();
+                }
+
                 var bindingList = new System.ComponentModel.BindingList<Movimiento>(candidatos);
                 _gridSistema.DataSource = bindingList;
-                _cmbFiltroSistema.SelectedIndex = 1; // "No encontrado"
+            }
+        }
+
+        private void BtnVincular_Click(object sender, EventArgs e)
+        {
+            if (_gridBanco.SelectedRows.Count == 0 || _gridSistema.SelectedRows.Count == 0)
+            {
+                MessageBox.Show("Seleccione una fila en el Banco y una fila en el Sistema para vincularlos.");
+                return;
+            }
+
+            var movBanco = _gridBanco.SelectedRows[0].DataBoundItem as Movimiento;
+            var movSistema = _gridSistema.SelectedRows[0].DataBoundItem as Movimiento;
+
+            if (movBanco != null && movSistema != null)
+            {
+                _engine.MarcarConciliado(movBanco, movSistema, "Match Manual");
+                LoadData();
+                MessageBox.Show("Movimientos vinculados correctamente.");
             }
         }
 
