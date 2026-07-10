@@ -50,7 +50,6 @@ namespace ConciliadorBancario.Data
 
                 EnsureColumnExists(connection, "Movimientos", "CodOperacionSistema", "TEXT");
 
-                // Legacy table creation or normal creation if it doesn't exist
                 ExecuteQuery(connection, @"
                     CREATE TABLE IF NOT EXISTS ConfiguracionBancos (
                         Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,14 +63,15 @@ namespace ConciliadorBancario.Data
                     );
                 ");
 
-                // Safe Migration: Add columns if they don't exist
                 EnsureColumnExists(connection, "ConfiguracionBancos", "ColumnaTipo", "TEXT");
                 EnsureColumnExists(connection, "ConfiguracionBancos", "ValorTipoSalida", "TEXT");
                 EnsureColumnExists(connection, "ConfiguracionBancos", "TipoConfiguracion", "TEXT");
                 EnsureColumnExists(connection, "ConfiguracionBancos", "ColumnaCodOperacionSistema", "TEXT");
 
-                // If TipoConfiguracion was just added, it will be NULL. Update legacy ones to 'Banco'
                 ExecuteQuery(connection, "UPDATE ConfiguracionBancos SET TipoConfiguracion = 'Banco' WHERE TipoConfiguracion IS NULL;");
+
+                // SEED the global system configuration based on the user's requirement
+                SeedSystemConfiguration(connection);
 
                 ExecuteQuery(connection, @"
                     CREATE TABLE IF NOT EXISTS ReglasAsientos (
@@ -124,6 +124,30 @@ namespace ConciliadorBancario.Data
             if (!exists)
             {
                 ExecuteQuery(connection, $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnDef};");
+            }
+        }
+
+        private static void SeedSystemConfiguration(SQLiteConnection connection)
+        {
+            // Check if global system config exists
+            bool hasSystem = false;
+            using (var cmd = new SQLiteCommand("SELECT COUNT(*) FROM ConfiguracionBancos WHERE NombreBanco = 'SISTEMA_GENERAL' AND TipoConfiguracion = 'Sistema'", connection))
+            {
+                hasSystem = Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+            }
+
+            if (!hasSystem)
+            {
+                // Delete any old system configs to clean up
+                ExecuteQuery(connection, "DELETE FROM ConfiguracionBancos WHERE TipoConfiguracion = 'Sistema'");
+
+                // Insert the definitive System config based on the screenshot
+                string insert = @"
+                    INSERT INTO ConfiguracionBancos
+                    (NombreBanco, TipoConfiguracion, ColumnaFecha, ColumnaMonto, ColumnaConcepto, ColumnaReferencia, ColumnaCodOperacionSistema, ColumnaTipo, ValorTipoSalida)
+                    VALUES ('SISTEMA_GENERAL', 'Sistema', 'Fecha', 'Importe', 'Concepto', 'codOperacionPago', 'NroOper', 'Tipo', '-');";
+
+                ExecuteQuery(connection, insert);
             }
         }
     }

@@ -24,7 +24,7 @@ namespace ConciliadorBancario.Services
             {
                 if (banco.Estado == EstadosMovimiento.PendienteAsientoMasivo) continue;
 
-                // Match exacto usando tolerancia muy pequeña para evitar errores de coma flotante
+                // Regular match exacto (misma fecha, mismo monto)
                 var match = sistemas.FirstOrDefault(s =>
                     Math.Abs(s.Monto - banco.Monto) < 0.01 &&
                     s.Fecha.Date == banco.Fecha.Date &&
@@ -37,6 +37,8 @@ namespace ConciliadorBancario.Services
                 }
             }
 
+            // Asientos Masivos Match
+            // User requested EXACT date match for AM because they are generated with the exact date from the bank
             bancos = _movRepo.GetPendientes("Banco");
             var masivosSistema = sistemas.Where(s => s.Concepto != null && s.Concepto.Contains("[AM-")).ToList();
 
@@ -45,7 +47,7 @@ namespace ConciliadorBancario.Services
                 var bancoMatch = bancos.FirstOrDefault(b =>
                     b.Estado == EstadosMovimiento.PendienteAsientoMasivo &&
                     Math.Abs(sys.Monto - b.Monto) < 0.01 &&
-                    Math.Abs((b.Fecha - sys.Fecha).TotalDays) <= 3);
+                    b.Fecha.Date == sys.Fecha.Date); // EXACT Date match
 
                 if(bancoMatch != null)
                 {
@@ -57,8 +59,9 @@ namespace ConciliadorBancario.Services
 
         public List<Movimiento> ObtenerCandidatosFuzzy(Movimiento origen, List<Movimiento> posibles)
         {
-            // Tolerance: Exact same amount (since auto-match fails due to date offsets usually) and within +- 7 days
-            // Fallback: Similar amount within +- 1 dollar and same date
+            // Fuzzy match for MANUAL linking.
+            // Allows up to 7 days difference for same amount (e.g. accounting entry delayed from bank date).
+            // Or same date but up to 1 dollar difference.
             return posibles.Where(p =>
                 p.Estado == EstadosMovimiento.NoEncontrado &&
                 ((Math.Abs(p.Monto - origen.Monto) < 0.01 && Math.Abs((p.Fecha - origen.Fecha).TotalDays) <= 7) ||

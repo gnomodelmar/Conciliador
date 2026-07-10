@@ -91,13 +91,28 @@ namespace ConciliadorBancario.Data
             }
         }
 
-        public void DesactivarMovimientosSistemaPorFecha(DateTime fechaInicio, DateTime? fechaFin, SQLiteConnection connection, SQLiteTransaction transaction)
+        public void DeleteMovimiento(int id)
         {
-            string query = "UPDATE Movimientos SET Activo = 0 WHERE TipoFuente = 'Sistema' AND Fecha >= @Inicio AND (@Fin IS NULL OR Fecha <= @Fin)";
+            using (var connection = new SQLiteConnection(DatabaseHelper.ConnectionString))
+            {
+                connection.Open();
+                string query = "UPDATE Movimientos SET Activo = 0 WHERE Id = @Id";
+                using (var command = new SQLiteCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@Id", id);
+                    command.ExecuteNonQuery();
+                }
+            }
+        }
+
+        public void DesactivarMovimientosSistemaPorFecha(DateTime fechaInicio, DateTime? fechaFin, string banco, SQLiteConnection connection, SQLiteTransaction transaction)
+        {
+            string query = "UPDATE Movimientos SET Activo = 0 WHERE TipoFuente = 'Sistema' AND Banco = @Banco AND Fecha >= @Inicio AND (@Fin IS NULL OR Fecha <= @Fin)";
             using (var command = new SQLiteCommand(query, connection, transaction))
             {
                 command.Parameters.AddWithValue("@Inicio", fechaInicio);
                 command.Parameters.AddWithValue("@Fin", fechaFin ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@Banco", banco);
                 command.ExecuteNonQuery();
             }
         }

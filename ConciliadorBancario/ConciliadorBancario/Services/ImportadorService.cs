@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
 using System.IO;
+using System.Linq;
 using ConciliadorBancario.Data;
 using ConciliadorBancario.Models;
 
@@ -159,6 +160,7 @@ namespace ConciliadorBancario.Services
                     {
                         if (tipoFuente == "Sistema")
                         {
+                            string bancoRef = movimientos.First().Banco;
                             foreach (var mov in movimientos)
                             {
                                 if (mov.Fecha < minFecha) minFecha = mov.Fecha;
@@ -166,7 +168,8 @@ namespace ConciliadorBancario.Services
                             }
                             if (minFecha <= maxFecha)
                             {
-                                _movRepo.DesactivarMovimientosSistemaPorFecha(minFecha, maxFecha, connection, transaction);
+                                // Pass the specific bank so we don't deactivate rows from other banks
+                                _movRepo.DesactivarMovimientosSistemaPorFecha(minFecha, maxFecha, bancoRef, connection, transaction);
                             }
                         }
 

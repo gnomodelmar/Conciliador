@@ -11,7 +11,7 @@ namespace ConciliadorBancario.Forms
 {
     public class ImportForm : Form
     {
-        private string _tipoFuente; // "Banco" o "Sistema"
+        private string _tipoFuente;
         private ComboBox _cmbBancos;
         private TextBox _txtFilePath;
         private DataGridView _gridPreview;
@@ -48,8 +48,8 @@ namespace ConciliadorBancario.Forms
             panelTop.Controls.Add(_txtFilePath);
             panelTop.Controls.Add(btnSelectFile);
 
-            var lblBanco = new Label { Text = _tipoFuente == "Banco" ? "Banco:" : "Configuración:", Location = new Point(10, 40), Width = 100 };
-            _cmbBancos = new ComboBox { Location = new Point(120, 38), Width = 190, DropDownStyle = ComboBoxStyle.DropDownList };
+            var lblBanco = new Label { Text = _tipoFuente == "Banco" ? "Banco:" : "Banco a Etiquetar:", Location = new Point(10, 40), Width = 120 };
+            _cmbBancos = new ComboBox { Location = new Point(130, 38), Width = 180, DropDownStyle = ComboBoxStyle.DropDownList };
             panelTop.Controls.Add(lblBanco);
             panelTop.Controls.Add(_cmbBancos);
 
@@ -83,8 +83,8 @@ namespace ConciliadorBancario.Forms
 
         private void LoadBancos()
         {
-            // Only load mappings for this specific source type
-            var bancos = _confRepo.GetAllBancos(_tipoFuente);
+            // For both imports, the user needs to select which Bank these movements belong to.
+            var bancos = _confRepo.GetAllBancos("Banco");
             foreach(var b in bancos)
             {
                 _cmbBancos.Items.Add(b.NombreBanco);
@@ -112,30 +112,31 @@ namespace ConciliadorBancario.Forms
             }
             if (_cmbBancos.SelectedItem == null)
             {
-                MessageBox.Show($"Cree un mapeo para '{_tipoFuente}' en Configuración primero.");
+                MessageBox.Show("Seleccione un banco.");
                 return;
             }
 
             try
             {
-                string configName = _cmbBancos.SelectedItem.ToString();
+                string targetBank = _cmbBancos.SelectedItem.ToString();
 
                 if (_tipoFuente == "Banco")
                 {
-                    _movimientosPrevia = _importadorService.PrepararImportacionBanco(_txtFilePath.Text, configName);
+                    _movimientosPrevia = _importadorService.PrepararImportacionBanco(_txtFilePath.Text, targetBank);
                 }
                 else
                 {
-                    var conf = _confRepo.GetConfiguracionBanco(configName, "Sistema");
-                    _movimientosPrevia = _importadorService.PrepararImportacionSistema(_txtFilePath.Text, conf);
+                    // For system imports, we use the universal global config, but tag it with the targetBank.
+                    var confSist = _confRepo.GetConfiguracionBanco("SISTEMA_GENERAL", "Sistema");
+                    confSist.NombreBanco = targetBank; // Assign target tag
+                    _movimientosPrevia = _importadorService.PrepararImportacionSistema(_txtFilePath.Text, confSist);
                 }
 
-                // If duplicates found, disable "Activo" (Incluir) by default
                 foreach (var m in _movimientosPrevia)
                 {
                     if (!string.IsNullOrEmpty(m.Observaciones) && m.Observaciones.Contains("Duplicado"))
                     {
-                        m.Activo = false; // User can re-check it in UI
+                        m.Activo = false;
                     }
                 }
 

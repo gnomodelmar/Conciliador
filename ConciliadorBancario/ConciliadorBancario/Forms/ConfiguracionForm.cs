@@ -40,10 +40,17 @@ namespace ConciliadorBancario.Forms
             // --- TAB BANCOS ---
             var tabBancos = new TabPage("Mapeo Bancos");
 
+            var lblAyuda = new Label {
+                Text = "Nota: El mapeo del Sistema Contable está unificado y pre-configurado.\nAquí solo configure cómo leer los Excel provenientes de los Bancos.",
+                Location = new Point(10, 10),
+                AutoSize = true,
+                ForeColor = Color.Blue
+            };
+
             _gridBancos = new DataGridView
             {
-                Location = new Point(10, 10),
-                Size = new Size(1200, 250),
+                Location = new Point(10, 50),
+                Size = new Size(1200, 210),
                 AutoGenerateColumns = false,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 EditMode = DataGridViewEditMode.EditOnKeystrokeOrF2,
@@ -53,10 +60,7 @@ namespace ConciliadorBancario.Forms
 
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "NombreBanco", DataPropertyName = "NombreBanco", HeaderText = "Nombre del Banco", Width = 130 });
 
-            var cmbTipoConf = new DataGridViewComboBoxColumn { Name = "TipoConfiguracion", DataPropertyName = "TipoConfiguracion", HeaderText = "Aplica a", Width = 90 };
-            cmbTipoConf.Items.AddRange(new[] { "Banco", "Sistema" });
-            _gridBancos.Columns.Add(cmbTipoConf);
-
+            // Only Bank mappings are editable now
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaFecha", DataPropertyName = "ColumnaFecha", HeaderText = "Col. Fecha", Width = 100 });
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaMonto", DataPropertyName = "ColumnaMonto", HeaderText = "Col. Monto (Unica)", Width = 100 });
             _gridBancos.Columns.Add(new DataGridViewTextBoxColumn { Name = "ColumnaMontoEntrada", DataPropertyName = "ColumnaMontoEntrada", HeaderText = "Col. Entrada", Width = 100 });
@@ -73,6 +77,7 @@ namespace ConciliadorBancario.Forms
             var btnDeleteBancos = new Button { Text = "Eliminar Mapeo Seleccionado", Location = new Point(220, 270), Width = 200 };
             btnDeleteBancos.Click += BtnDeleteBancos_Click;
 
+            tabBancos.Controls.Add(lblAyuda);
             tabBancos.Controls.Add(_gridBancos);
             tabBancos.Controls.Add(btnSaveBancos);
             tabBancos.Controls.Add(btnDeleteBancos);
@@ -80,7 +85,6 @@ namespace ConciliadorBancario.Forms
             // --- TAB REGLAS ---
             var tabReglas = new TabPage("Reglas Asientos Masivos");
 
-            // Left Panel (List rules)
             var panelReglasIzquierdo = new Panel { Dock = DockStyle.Left, Width = 300 };
             _gridReglas = new DataGridView { Dock = DockStyle.Fill, AutoGenerateColumns = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect, ReadOnly = true, AllowUserToAddRows = false };
             _gridReglas.Columns.Add(new DataGridViewTextBoxColumn { Name = "Id", DataPropertyName = "Id", Visible = false });
@@ -104,11 +108,10 @@ namespace ConciliadorBancario.Forms
             panelReglasIzquierdo.Controls.Add(btnNuevaRegla);
             panelReglasIzquierdo.Controls.Add(btnEliminarRegla);
 
-            // Right Panel (Create/Edit rule)
             var panelReglasDerecho = new Panel { Dock = DockStyle.Fill };
 
             var lblTituloCreate = new Label { Text = "Editor de Regla", Location = new Point(10, 10), Font = new Font("Arial", 10, FontStyle.Bold), AutoSize = true };
-            var lblNombre = new Label { Text = "Nombre Regla:", Location = new Point(10, 40), Width = 100 };
+            var lblNombreR = new Label { Text = "Nombre Regla:", Location = new Point(10, 40), Width = 100 };
             _txtNombreRegla = new TextBox { Location = new Point(120, 40), Width = 200 };
 
             var lblPalabra = new Label { Text = "Palabra Clave:", Location = new Point(10, 70), Width = 100 };
@@ -117,7 +120,7 @@ namespace ConciliadorBancario.Forms
             var lblBanco = new Label { Text = "Banco:", Location = new Point(10, 100), Width = 100 };
             _cmbBancoReglas = new ComboBox { Location = new Point(120, 100), Width = 200, DropDownStyle = ComboBoxStyle.DropDownList };
 
-            var lblAyuda = new Label { Text = "Variables permitidas en Concepto: {MM/YYYY}, {BANCO}", Location = new Point(350, 40), AutoSize = true, ForeColor = Color.Gray };
+            var lblAyudaR = new Label { Text = "Variables permitidas en Concepto: {MM/YYYY}, {BANCO}", Location = new Point(350, 40), AutoSize = true, ForeColor = Color.Gray };
 
             var gridDetalles = new DataGridView
             {
@@ -168,13 +171,13 @@ namespace ConciliadorBancario.Forms
             };
 
             panelReglasDerecho.Controls.Add(lblTituloCreate);
-            panelReglasDerecho.Controls.Add(lblNombre);
+            panelReglasDerecho.Controls.Add(lblNombreR);
             panelReglasDerecho.Controls.Add(_txtNombreRegla);
             panelReglasDerecho.Controls.Add(lblPalabra);
             panelReglasDerecho.Controls.Add(_txtPalabraClave);
             panelReglasDerecho.Controls.Add(lblBanco);
             panelReglasDerecho.Controls.Add(_cmbBancoReglas);
-            panelReglasDerecho.Controls.Add(lblAyuda);
+            panelReglasDerecho.Controls.Add(lblAyudaR);
             panelReglasDerecho.Controls.Add(gridDetalles);
             panelReglasDerecho.Controls.Add(btnGuardarRegla);
 
@@ -189,14 +192,14 @@ namespace ConciliadorBancario.Forms
 
         private void LoadBancos()
         {
-            var bancos = _confRepo.GetAllBancos();
+            var bancos = _confRepo.GetAllBancos("Banco"); // Only load Banks for editing
             _gridBancos.DataSource = new System.ComponentModel.BindingList<ConfiguracionBanco>(bancos);
 
             _cmbBancoReglas.Items.Clear();
             var uniqueBancos = new HashSet<string>();
             foreach(var b in bancos)
             {
-                if (b.TipoConfiguracion == "Banco" && uniqueBancos.Add(b.NombreBanco))
+                if (uniqueBancos.Add(b.NombreBanco))
                 {
                     _cmbBancoReglas.Items.Add(b.NombreBanco);
                 }
@@ -239,13 +242,14 @@ namespace ConciliadorBancario.Forms
                 {
                     foreach (var conf in bindingList)
                     {
-                        if (!string.IsNullOrWhiteSpace(conf.NombreBanco) && !string.IsNullOrWhiteSpace(conf.TipoConfiguracion))
+                        if (!string.IsNullOrWhiteSpace(conf.NombreBanco))
                         {
+                            conf.TipoConfiguracion = "Banco"; // Enforce it
                             _confRepo.SaveConfiguracionBanco(conf);
                         }
                     }
                     MessageBox.Show("Bancos guardados correctamente.");
-                    LoadBancos(); // Refresh dropdowns
+                    LoadBancos();
                 }
             }
             catch (Exception ex)
@@ -261,10 +265,10 @@ namespace ConciliadorBancario.Forms
                 var conf = _gridBancos.SelectedRows[0].DataBoundItem as ConfiguracionBanco;
                 if (conf != null && !string.IsNullOrWhiteSpace(conf.NombreBanco))
                 {
-                    var res = MessageBox.Show($"¿Eliminar configuración de {conf.NombreBanco} ({conf.TipoConfiguracion})?", "Confirmar", MessageBoxButtons.YesNo);
+                    var res = MessageBox.Show($"¿Eliminar configuración del banco {conf.NombreBanco}?", "Confirmar", MessageBoxButtons.YesNo);
                     if (res == DialogResult.Yes)
                     {
-                        _confRepo.DeleteConfiguracionBanco(conf.NombreBanco, conf.TipoConfiguracion);
+                        _confRepo.DeleteConfiguracionBanco(conf.NombreBanco, "Banco");
                         LoadBancos();
                     }
                 }
