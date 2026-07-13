@@ -47,7 +47,7 @@ namespace ConciliadorBancario.Services
 
                 string fechaStr = GetRowValue(row, conf.ColumnaFecha);
                 var f = DataSanitizer.ParseFecha(fechaStr);
-                if (f == null) continue; // Skip invalid rows
+                if (f == null) continue;
                 mov.Fecha = f.Value;
 
                 if (!string.IsNullOrEmpty(conf.ColumnaMonto))
@@ -70,7 +70,14 @@ namespace ConciliadorBancario.Services
                     mov.Monto = entrada > 0 ? entrada : -salida;
                 }
 
-                mov.Concepto = GetRowValue(row, conf.ColumnaConcepto);
+                string concepto = GetRowValue(row, conf.ColumnaConcepto);
+                string concepto2 = GetRowValue(row, conf.ColumnaConcepto2);
+                if (!string.IsNullOrWhiteSpace(concepto2))
+                {
+                    concepto = $"{concepto} {concepto2}".Trim();
+                }
+                mov.Concepto = concepto;
+
                 mov.Referencia_CodOperacion = GetRowValue(row, conf.ColumnaReferencia);
 
                 foreach (var regla in reglas)
@@ -135,7 +142,14 @@ namespace ConciliadorBancario.Services
                     mov.Monto = entrada > 0 ? entrada : -salida;
                 }
 
-                mov.Concepto = GetRowValue(row, conf.ColumnaConcepto);
+                string concepto = GetRowValue(row, conf.ColumnaConcepto);
+                string concepto2 = GetRowValue(row, conf.ColumnaConcepto2);
+                if (!string.IsNullOrWhiteSpace(concepto2))
+                {
+                    concepto = $"{concepto} {concepto2}".Trim();
+                }
+                mov.Concepto = concepto;
+
                 mov.Referencia_CodOperacion = GetRowValue(row, conf.ColumnaReferencia);
                 mov.CodOperacionSistema = GetRowValue(row, conf.ColumnaCodOperacionSistema);
                 mov.Banco = conf.NombreBanco;

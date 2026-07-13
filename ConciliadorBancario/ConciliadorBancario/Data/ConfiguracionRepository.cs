@@ -31,6 +31,7 @@ namespace ConciliadorBancario.Data
                                 ColumnaMontoEntrada = reader["ColumnaMontoEntrada"].ToString(),
                                 ColumnaMontoSalida = reader["ColumnaMontoSalida"].ToString(),
                                 ColumnaConcepto = reader["ColumnaConcepto"].ToString(),
+                                ColumnaConcepto2 = reader["ColumnaConcepto2"] == DBNull.Value ? "" : reader["ColumnaConcepto2"].ToString(),
                                 ColumnaReferencia = reader["ColumnaReferencia"].ToString(),
                                 ColumnaCodOperacionSistema = reader["ColumnaCodOperacionSistema"] == DBNull.Value ? "" : reader["ColumnaCodOperacionSistema"].ToString(),
                                 ColumnaTipo = reader["ColumnaTipo"] == DBNull.Value ? "" : reader["ColumnaTipo"].ToString(),
@@ -76,6 +77,7 @@ namespace ConciliadorBancario.Data
                                 ColumnaMontoEntrada = reader["ColumnaMontoEntrada"].ToString(),
                                 ColumnaMontoSalida = reader["ColumnaMontoSalida"].ToString(),
                                 ColumnaConcepto = reader["ColumnaConcepto"].ToString(),
+                                ColumnaConcepto2 = reader["ColumnaConcepto2"] == DBNull.Value ? "" : reader["ColumnaConcepto2"].ToString(),
                                 ColumnaReferencia = reader["ColumnaReferencia"].ToString(),
                                 ColumnaCodOperacionSistema = reader["ColumnaCodOperacionSistema"] == DBNull.Value ? "" : reader["ColumnaCodOperacionSistema"].ToString(),
                                 ColumnaTipo = reader["ColumnaTipo"] == DBNull.Value ? "" : reader["ColumnaTipo"].ToString(),
@@ -101,14 +103,14 @@ namespace ConciliadorBancario.Data
                 if (existente == null)
                 {
                     query = @"INSERT INTO ConfiguracionBancos
-                              (NombreBanco, TipoConfiguracion, ColumnaFecha, ColumnaMonto, ColumnaMontoEntrada, ColumnaMontoSalida, ColumnaConcepto, ColumnaReferencia, ColumnaCodOperacionSistema, ColumnaTipo, ValorTipoSalida)
-                              VALUES (@Nombre, @Tipo, @F, @M, @ME, @MS, @C, @R, @CS, @CT, @VT)";
+                              (NombreBanco, TipoConfiguracion, ColumnaFecha, ColumnaMonto, ColumnaMontoEntrada, ColumnaMontoSalida, ColumnaConcepto, ColumnaConcepto2, ColumnaReferencia, ColumnaCodOperacionSistema, ColumnaTipo, ValorTipoSalida)
+                              VALUES (@Nombre, @Tipo, @F, @M, @ME, @MS, @C, @C2, @R, @CS, @CT, @VT)";
                 }
                 else
                 {
                     query = @"UPDATE ConfiguracionBancos
                               SET ColumnaFecha=@F, ColumnaMonto=@M, ColumnaMontoEntrada=@ME, ColumnaMontoSalida=@MS,
-                                  ColumnaConcepto=@C, ColumnaReferencia=@R, ColumnaCodOperacionSistema=@CS, ColumnaTipo=@CT, ValorTipoSalida=@VT
+                                  ColumnaConcepto=@C, ColumnaConcepto2=@C2, ColumnaReferencia=@R, ColumnaCodOperacionSistema=@CS, ColumnaTipo=@CT, ValorTipoSalida=@VT
                               WHERE NombreBanco=@Nombre AND TipoConfiguracion=@Tipo";
                 }
 
@@ -121,6 +123,7 @@ namespace ConciliadorBancario.Data
                     command.Parameters.AddWithValue("@ME", config.ColumnaMontoEntrada ?? "");
                     command.Parameters.AddWithValue("@MS", config.ColumnaMontoSalida ?? "");
                     command.Parameters.AddWithValue("@C", config.ColumnaConcepto ?? "");
+                    command.Parameters.AddWithValue("@C2", config.ColumnaConcepto2 ?? "");
                     command.Parameters.AddWithValue("@R", config.ColumnaReferencia ?? "");
                     command.Parameters.AddWithValue("@CS", config.ColumnaCodOperacionSistema ?? "");
                     command.Parameters.AddWithValue("@CT", config.ColumnaTipo ?? "");

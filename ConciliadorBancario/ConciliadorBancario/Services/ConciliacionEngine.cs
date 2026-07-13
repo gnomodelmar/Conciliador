@@ -25,12 +25,11 @@ namespace ConciliadorBancario.Services
             {
                 if (banco.Estado == EstadosMovimiento.PendienteAsientoMasivo) continue;
 
-                // 1. Auto-Match by Operation Code & Amount (Bypasses date requirement, ignores leading zeros)
                 Movimiento match = null;
                 if (!string.IsNullOrWhiteSpace(banco.Referencia_CodOperacion))
                 {
                     string cleanBancoCod = banco.Referencia_CodOperacion.TrimStart('0');
-                    if (string.IsNullOrEmpty(cleanBancoCod)) cleanBancoCod = "0"; // In case it was just "0000"
+                    if (string.IsNullOrEmpty(cleanBancoCod)) cleanBancoCod = "0";
 
                     match = sistemas.FirstOrDefault(s =>
                         !string.IsNullOrWhiteSpace(s.CodOperacionSistema) &&
@@ -42,11 +41,10 @@ namespace ConciliadorBancario.Services
                     {
                         MarcarConciliado(banco, match, $"Auto Match por Cód. Operación Sist:[{match.CodOperacionSistema}] Banco:[{banco.Referencia_CodOperacion}]");
                         sistemas.Remove(match);
-                        continue; // Go to next bank item
+                        continue;
                     }
                 }
 
-                // 2. Regular auto-match (misma fecha, mismo monto)
                 match = sistemas.FirstOrDefault(s =>
                     Math.Abs(s.Monto - banco.Monto) < 0.01 &&
                     s.Fecha.Date == banco.Fecha.Date &&
@@ -59,7 +57,6 @@ namespace ConciliadorBancario.Services
                 }
             }
 
-            // Asientos Masivos Match
             bancos = _movRepo.GetPendientes("Banco");
             var masivosSistema = sistemas.Where(s => s.Concepto != null && s.Concepto.Contains("[AM-")).ToList();
 
@@ -100,13 +97,9 @@ namespace ConciliadorBancario.Services
                 ((Math.Abs(p.Monto - origen.Monto) < 0.01 && Math.Abs((p.Fecha - origen.Fecha).TotalDays) <= 7) ||
                  (Math.Abs(p.Monto - origen.Monto) <= 1.00 && p.Fecha.Date == origen.Fecha.Date))
                 )
-                // 1. Order by Concept Word Overlap Count (Higher is better)
                 .OrderByDescending(p => CountWordOverlap(origenWords, p.Concepto))
-                // 2. Order by Bank tag match
                 .ThenByDescending(p => p.Banco == origen.Banco)
-                // 3. Order by Amount difference
                 .ThenBy(p => Math.Abs(p.Monto - origen.Monto))
-                // 4. Order by Date difference
                 .ThenBy(p => Math.Abs((p.Fecha - origen.Fecha).TotalDays))
                 .ToList();
         }
@@ -116,7 +109,6 @@ namespace ConciliadorBancario.Services
             var words = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (string.IsNullOrWhiteSpace(text)) return words;
 
-            // Extract words with 3 or more characters (letters/numbers)
             var matches = Regex.Matches(text, @"\b\w{3,}\b");
             foreach (Match match in matches)
             {
@@ -142,6 +134,13 @@ namespace ConciliadorBancario.Services
         {
             _movRepo.UpdateEstado(banco.Id, EstadosMovimiento.Conciliado, obs, sistema.Id);
             _movRepo.UpdateEstado(sistema.Id, EstadosMovimiento.Conciliado, obs, banco.Id);
+        }
+
+        public void MarcarConciliadoMulti(List<Movimiento> bancos, List<Movimiento> sistemas, string obs)
+        {
+            string grupoId = Guid.NewGuid().ToString();
+            _movRepo.UpdateEstadoMulti(bancos.Select(b => b.Id).ToList(), EstadosMovimiento.Conciliado, obs, grupoId);
+            _movRepo.UpdateEstadoMulti(sistemas.Select(s => s.Id).ToList(), EstadosMovimiento.Conciliado, obs, grupoId);
         }
     }
 }

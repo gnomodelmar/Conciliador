@@ -24,11 +24,13 @@ namespace ConciliadorBancario.Forms
         private ComboBox _cmbFiltroBancoBco;
         private DateTimePicker _dtBancoDesde;
         private DateTimePicker _dtBancoHasta;
+        private TextBox _txtSearchBanco;
 
         private ComboBox _cmbFiltroSistEst;
         private ComboBox _cmbFiltroSistBco;
         private DateTimePicker _dtSistDesde;
         private DateTimePicker _dtSistHasta;
+        private TextBox _txtSearchSist;
 
         private MovimientoRepository _movRepo;
         private ConciliacionEngine _engine;
@@ -99,7 +101,7 @@ namespace ConciliadorBancario.Forms
 
             // --- Panel Banco ---
             var panelIzquierdo = new Panel { Dock = DockStyle.Fill };
-            var headerIzquierdo = new Panel { Dock = DockStyle.Top, Height = 90 };
+            var headerIzquierdo = new Panel { Dock = DockStyle.Top, Height = 120 };
             headerIzquierdo.Controls.Add(new Label { Text = "Movimientos Bancarios", Location = new Point(10, 5), Font = new Font("Arial", 12, FontStyle.Bold), AutoSize = true });
 
             headerIzquierdo.Controls.Add(new Label { Text = "Estado:", Location = new Point(10, 35), AutoSize = true });
@@ -120,13 +122,18 @@ namespace ConciliadorBancario.Forms
             _dtBancoHasta = new DateTimePicker { Location = new Point(220, 62), Width = 100, Format = DateTimePickerFormat.Short, Value = new DateTime(2100, 1, 1) };
             _dtBancoHasta.ValueChanged += (s, e) => FilterData();
 
-            var btnResetBanco = new Button { Text = "Limpiar Filtros", Location = new Point(330, 60), Width = 100 };
-            btnResetBanco.Click += (s, e) => { _cmbFiltroBancoEst.SelectedIndex=0; _cmbFiltroBancoBco.SelectedIndex=0; _dtBancoDesde.Value=new DateTime(2000,1,1); _dtBancoHasta.Value=new DateTime(2100,1,1); };
+            headerIzquierdo.Controls.Add(new Label { Text = "Buscar:", Location = new Point(10, 95), AutoSize = true });
+            _txtSearchBanco = new TextBox { Location = new Point(60, 92), Width = 260 };
+            _txtSearchBanco.TextChanged += (s, e) => FilterData();
+
+            var btnResetBanco = new Button { Text = "Limpiar Filtros", Location = new Point(330, 90), Width = 100 };
+            btnResetBanco.Click += (s, e) => { _txtSearchBanco.Clear(); _cmbFiltroBancoEst.SelectedIndex=0; _cmbFiltroBancoBco.SelectedIndex=0; _dtBancoDesde.Value=new DateTime(2000,1,1); _dtBancoHasta.Value=new DateTime(2100,1,1); };
 
             headerIzquierdo.Controls.Add(_cmbFiltroBancoEst);
             headerIzquierdo.Controls.Add(_cmbFiltroBancoBco);
             headerIzquierdo.Controls.Add(_dtBancoDesde);
             headerIzquierdo.Controls.Add(_dtBancoHasta);
+            headerIzquierdo.Controls.Add(_txtSearchBanco);
             headerIzquierdo.Controls.Add(btnResetBanco);
 
             _gridBanco = CrearGrid(true);
@@ -135,7 +142,7 @@ namespace ConciliadorBancario.Forms
 
             // --- Panel Sistema ---
             var panelDerecho = new Panel { Dock = DockStyle.Fill };
-            var headerDerecho = new Panel { Dock = DockStyle.Top, Height = 90 };
+            var headerDerecho = new Panel { Dock = DockStyle.Top, Height = 120 };
             headerDerecho.Controls.Add(new Label { Text = "Movimientos del Sistema", Location = new Point(10, 5), Font = new Font("Arial", 12, FontStyle.Bold), AutoSize = true });
 
             headerDerecho.Controls.Add(new Label { Text = "Estado:", Location = new Point(10, 35), AutoSize = true });
@@ -156,13 +163,18 @@ namespace ConciliadorBancario.Forms
             _dtSistHasta = new DateTimePicker { Location = new Point(220, 62), Width = 100, Format = DateTimePickerFormat.Short, Value = new DateTime(2100, 1, 1) };
             _dtSistHasta.ValueChanged += (s, e) => FilterData();
 
-            var btnResetSist = new Button { Text = "Limpiar Filtros", Location = new Point(330, 60), Width = 100 };
-            btnResetSist.Click += (s, e) => { _cmbFiltroSistEst.SelectedIndex=0; _cmbFiltroSistBco.SelectedIndex=0; _dtSistDesde.Value=new DateTime(2000,1,1); _dtSistHasta.Value=new DateTime(2100,1,1); };
+            headerDerecho.Controls.Add(new Label { Text = "Buscar:", Location = new Point(10, 95), AutoSize = true });
+            _txtSearchSist = new TextBox { Location = new Point(60, 92), Width = 260 };
+            _txtSearchSist.TextChanged += (s, e) => FilterData();
+
+            var btnResetSist = new Button { Text = "Limpiar Filtros", Location = new Point(330, 90), Width = 100 };
+            btnResetSist.Click += (s, e) => { _txtSearchSist.Clear(); _cmbFiltroSistEst.SelectedIndex=0; _cmbFiltroSistBco.SelectedIndex=0; _dtSistDesde.Value=new DateTime(2000,1,1); _dtSistHasta.Value=new DateTime(2100,1,1); };
 
             headerDerecho.Controls.Add(_cmbFiltroSistEst);
             headerDerecho.Controls.Add(_cmbFiltroSistBco);
             headerDerecho.Controls.Add(_dtSistDesde);
             headerDerecho.Controls.Add(_dtSistHasta);
+            headerDerecho.Controls.Add(_txtSearchSist);
             headerDerecho.Controls.Add(btnResetSist);
 
             _gridSistema = CrearGrid(false);
@@ -254,30 +266,49 @@ namespace ConciliadorBancario.Forms
         {
             if (_allBanco == null || _allSistema == null || _isUpdatingSelection) return;
 
+            // Save scroll positions
+            int scrollBco = _gridBanco.FirstDisplayedScrollingRowIndex;
+            int scrollSis = _gridSistema.FirstDisplayedScrollingRowIndex;
+
             string estadoBco = _cmbFiltroBancoEst.SelectedItem?.ToString() ?? "Todos";
             string bancoBco = _cmbFiltroBancoBco.SelectedItem?.ToString() ?? "Todos";
             DateTime desdeBco = _dtBancoDesde.Value.Date;
             DateTime hastaBco = _dtBancoHasta.Value.Date;
+            string searchBco = _txtSearchBanco.Text.Trim().ToLower();
 
             var bancoList = _allBanco.Where(m =>
                 (estadoBco == "Todos" || m.Estado == estadoBco) &&
                 (bancoBco == "Todos" || m.Banco == bancoBco) &&
-                m.Fecha.Date >= desdeBco && m.Fecha.Date <= hastaBco
+                m.Fecha.Date >= desdeBco && m.Fecha.Date <= hastaBco &&
+                (string.IsNullOrEmpty(searchBco) ||
+                 (m.Concepto != null && m.Concepto.ToLower().Contains(searchBco)) ||
+                 m.Monto.ToString().Contains(searchBco) ||
+                 (m.Referencia_CodOperacion != null && m.Referencia_CodOperacion.ToLower().Contains(searchBco)))
             ).ToList();
 
             string estadoSis = _cmbFiltroSistEst.SelectedItem?.ToString() ?? "Todos";
             string bancoSis = _cmbFiltroSistBco.SelectedItem?.ToString() ?? "Todos";
             DateTime desdeSis = _dtSistDesde.Value.Date;
             DateTime hastaSis = _dtSistHasta.Value.Date;
+            string searchSis = _txtSearchSist.Text.Trim().ToLower();
 
             var sistemaList = _allSistema.Where(m =>
                 (estadoSis == "Todos" || m.Estado == estadoSis) &&
                 (bancoSis == "Todos" || m.Banco == bancoSis) &&
-                m.Fecha.Date >= desdeSis && m.Fecha.Date <= hastaSis
+                m.Fecha.Date >= desdeSis && m.Fecha.Date <= hastaSis &&
+                (string.IsNullOrEmpty(searchSis) ||
+                 (m.Concepto != null && m.Concepto.ToLower().Contains(searchSis)) ||
+                 m.Monto.ToString().Contains(searchSis) ||
+                 (m.Referencia_CodOperacion != null && m.Referencia_CodOperacion.ToLower().Contains(searchSis)) ||
+                 (m.CodOperacionSistema != null && m.CodOperacionSistema.ToLower().Contains(searchSis)))
             ).ToList();
 
             _gridBanco.DataSource = new SortableBindingList<Movimiento>(bancoList);
             _gridSistema.DataSource = new SortableBindingList<Movimiento>(sistemaList);
+
+            // Restore scroll positions safely
+            if (scrollBco >= 0 && scrollBco < _gridBanco.Rows.Count) _gridBanco.FirstDisplayedScrollingRowIndex = scrollBco;
+            if (scrollSis >= 0 && scrollSis < _gridSistema.Rows.Count) _gridSistema.FirstDisplayedScrollingRowIndex = scrollSis;
         }
 
         private void InteraccionGrilla(DataGridView sourceGrid, DataGridView targetGrid, bool isSourceBanco, DataGridViewCellEventArgs e)
@@ -288,7 +319,7 @@ namespace ConciliadorBancario.Forms
 
             try
             {
-                if (movSource.Estado == EstadosMovimiento.Conciliado && movSource.MatchId.HasValue)
+                if (movSource.Estado == EstadosMovimiento.Conciliado && (movSource.MatchId.HasValue || !string.IsNullOrEmpty(movSource.MatchGrupoId)))
                 {
                     ComboBox targetComboEst = isSourceBanco ? _cmbFiltroSistEst : _cmbFiltroBancoEst;
                     if (targetComboEst.SelectedIndex != 0 && targetComboEst.SelectedItem.ToString() != EstadosMovimiento.Conciliado)
@@ -300,15 +331,23 @@ namespace ConciliadorBancario.Forms
                     }
 
                     targetGrid.ClearSelection();
+                    int firstScrolled = -1;
                     foreach (DataGridViewRow row in targetGrid.Rows)
                     {
                         var m = row.DataBoundItem as Movimiento;
-                        if (m != null && m.Id == movSource.MatchId.Value)
+                        if (m != null)
                         {
-                            row.Selected = true;
-                            targetGrid.FirstDisplayedScrollingRowIndex = row.Index;
-                            break;
+                            if ((movSource.MatchId.HasValue && m.Id == movSource.MatchId.Value) ||
+                                (!string.IsNullOrEmpty(movSource.MatchGrupoId) && m.MatchGrupoId == movSource.MatchGrupoId))
+                            {
+                                row.Selected = true;
+                                if (firstScrolled == -1) firstScrolled = row.Index;
+                            }
                         }
+                    }
+                    if (firstScrolled != -1)
+                    {
+                        targetGrid.FirstDisplayedScrollingRowIndex = firstScrolled;
                     }
                 }
                 else if (isSourceBanco && (movSource.Estado == EstadosMovimiento.NoEncontrado || movSource.Estado == EstadosMovimiento.PosibleMatch))
@@ -321,7 +360,11 @@ namespace ConciliadorBancario.Forms
                         {
                             _cmbFiltroSistEst.SelectedIndex = 0;
                         }
+
+                        // Preserve target scroll
+                        int scrollSis = targetGrid.FirstDisplayedScrollingRowIndex;
                         targetGrid.DataSource = new SortableBindingList<Movimiento>(candidatos);
+                        if (scrollSis >= 0 && scrollSis < targetGrid.Rows.Count) targetGrid.FirstDisplayedScrollingRowIndex = scrollSis;
                     }
                 }
             }
@@ -365,19 +408,25 @@ namespace ConciliadorBancario.Forms
         {
             if (_gridBanco.SelectedRows.Count == 0 || _gridSistema.SelectedRows.Count == 0)
             {
-                MessageBox.Show("Seleccione una fila en el Banco y una fila en el Sistema para vincularlos.");
+                MessageBox.Show("Seleccione al menos una fila en el Banco y una fila en el Sistema para vincularlos.");
                 return;
             }
 
-            var movBanco = _gridBanco.SelectedRows[0].DataBoundItem as Movimiento;
-            var movSistema = _gridSistema.SelectedRows[0].DataBoundItem as Movimiento;
+            var movsBanco = _gridBanco.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem as Movimiento).ToList();
+            var movsSistema = _gridSistema.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem as Movimiento).ToList();
 
-            if (movBanco != null && movSistema != null)
+            if (movsBanco.Count == 1 && movsSistema.Count == 1)
             {
-                _engine.MarcarConciliado(movBanco, movSistema, "Match Manual");
-                LoadData();
-                MessageBox.Show("Movimientos vinculados correctamente.");
+                _engine.MarcarConciliado(movsBanco[0], movsSistema[0], "Match Manual 1a1");
             }
+            else
+            {
+                // Multi-match
+                _engine.MarcarConciliadoMulti(movsBanco, movsSistema, $"Match Manual Multi ({movsBanco.Count} Bco vs {movsSistema.Count} Sist)");
+            }
+
+            LoadData();
+            MessageBox.Show("Movimientos vinculados correctamente.");
         }
 
         private void EliminarFilas(DataGridView grid)
@@ -412,7 +461,7 @@ namespace ConciliadorBancario.Forms
             {
                 _movRepo.UpdateEstado(mov.Id, mov.Estado, mov.Observaciones, mov.MatchId);
 
-                if (mov.Estado != EstadosMovimiento.Conciliado && mov.MatchId.HasValue)
+                if (mov.Estado != EstadosMovimiento.Conciliado && (mov.MatchId.HasValue || !string.IsNullOrEmpty(mov.MatchGrupoId)))
                 {
                     LoadData();
                 }

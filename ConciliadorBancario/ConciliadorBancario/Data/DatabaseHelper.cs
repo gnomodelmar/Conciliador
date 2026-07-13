@@ -49,6 +49,7 @@ namespace ConciliadorBancario.Data
                 ");
 
                 EnsureColumnExists(connection, "Movimientos", "CodOperacionSistema", "TEXT");
+                EnsureColumnExists(connection, "Movimientos", "MatchGrupoId", "TEXT"); // For N-to-1 matching
 
                 ExecuteQuery(connection, @"
                     CREATE TABLE IF NOT EXISTS ConfiguracionBancos (
@@ -67,10 +68,10 @@ namespace ConciliadorBancario.Data
                 EnsureColumnExists(connection, "ConfiguracionBancos", "ValorTipoSalida", "TEXT");
                 EnsureColumnExists(connection, "ConfiguracionBancos", "TipoConfiguracion", "TEXT");
                 EnsureColumnExists(connection, "ConfiguracionBancos", "ColumnaCodOperacionSistema", "TEXT");
+                EnsureColumnExists(connection, "ConfiguracionBancos", "ColumnaConcepto2", "TEXT");
 
                 ExecuteQuery(connection, "UPDATE ConfiguracionBancos SET TipoConfiguracion = 'Banco' WHERE TipoConfiguracion IS NULL;");
 
-                // SEED the global system configuration based on the user's requirement
                 SeedSystemConfiguration(connection);
 
                 ExecuteQuery(connection, @"
@@ -129,7 +130,6 @@ namespace ConciliadorBancario.Data
 
         private static void SeedSystemConfiguration(SQLiteConnection connection)
         {
-            // Check if global system config exists
             bool hasSystem = false;
             using (var cmd = new SQLiteCommand("SELECT COUNT(*) FROM ConfiguracionBancos WHERE NombreBanco = 'SISTEMA_GENERAL' AND TipoConfiguracion = 'Sistema'", connection))
             {
@@ -138,10 +138,8 @@ namespace ConciliadorBancario.Data
 
             if (!hasSystem)
             {
-                // Delete any old system configs to clean up
                 ExecuteQuery(connection, "DELETE FROM ConfiguracionBancos WHERE TipoConfiguracion = 'Sistema'");
 
-                // Insert the definitive System config based on the screenshot
                 string insert = @"
                     INSERT INTO ConfiguracionBancos
                     (NombreBanco, TipoConfiguracion, ColumnaFecha, ColumnaMonto, ColumnaConcepto, ColumnaReferencia, ColumnaCodOperacionSistema, ColumnaTipo, ValorTipoSalida)

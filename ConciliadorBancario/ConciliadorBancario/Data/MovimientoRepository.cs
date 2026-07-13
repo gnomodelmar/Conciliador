@@ -55,8 +55,8 @@ namespace ConciliadorBancario.Data
         public void InsertMovimiento(Movimiento mov, SQLiteConnection connection, SQLiteTransaction transaction)
         {
             string query = @"
-                INSERT INTO Movimientos (LoteId, TipoFuente, Fecha, Monto, Concepto, Referencia_CodOperacion, CodOperacionSistema, Estado, Observaciones, Banco, Activo)
-                VALUES (@LoteId, @TipoFuente, @Fecha, @Monto, @Concepto, @Referencia_CodOperacion, @CodOperacionSistema, @Estado, @Observaciones, @Banco, 1)";
+                INSERT INTO Movimientos (LoteId, TipoFuente, Fecha, Monto, Concepto, Referencia_CodOperacion, CodOperacionSistema, MatchGrupoId, Estado, Observaciones, Banco, Activo)
+                VALUES (@LoteId, @TipoFuente, @Fecha, @Monto, @Concepto, @Referencia_CodOperacion, @CodOperacionSistema, @MatchGrupoId, @Estado, @Observaciones, @Banco, 1)";
 
             using (var command = new SQLiteCommand(query, connection, transaction))
             {
@@ -67,6 +67,7 @@ namespace ConciliadorBancario.Data
                 command.Parameters.AddWithValue("@Concepto", mov.Concepto ?? (object)DBNull.Value);
                 command.Parameters.AddWithValue("@Referencia_CodOperacion", mov.Referencia_CodOperacion ?? (object)DBNull.Value);
                 command.Parameters.AddWithValue("@CodOperacionSistema", mov.CodOperacionSistema ?? (object)DBNull.Value);
+                command.Parameters.AddWithValue("@MatchGrupoId", mov.MatchGrupoId ?? (object)DBNull.Value);
                 command.Parameters.AddWithValue("@Estado", mov.Estado);
                 command.Parameters.AddWithValue("@Observaciones", mov.Observaciones ?? (object)DBNull.Value);
                 command.Parameters.AddWithValue("@Banco", mov.Banco ?? (object)DBNull.Value);
@@ -76,7 +77,6 @@ namespace ConciliadorBancario.Data
 
         public void UpdateEstado(int id, string nuevoEstado, string observaciones, int? matchId)
         {
-            // Requires explicit matchId to prevent accidental nullification
             using (var connection = new SQLiteConnection(DatabaseHelper.ConnectionString))
             {
                 connection.Open();
@@ -84,6 +84,16 @@ namespace ConciliadorBancario.Data
                 {
                     try
                     {
+                        // To properly clear groups when unmatched via UI
+                        string fetchGroupQuery = "SELECT MatchGrupoId FROM Movimientos WHERE Id = @Id";
+                        string matchGrupoId = null;
+                        using(var fetchCmd = new SQLiteCommand(fetchGroupQuery, connection, transaction))
+                        {
+                            fetchCmd.Parameters.AddWithValue("@Id", id);
+                            var res = fetchCmd.ExecuteScalar();
+                            if (res != DBNull.Value && res != null) matchGrupoId = res.ToString();
+                        }
+
                         string query = "UPDATE Movimientos SET Estado = @Estado, Observaciones = @Obs, MatchId = @MatchId WHERE Id = @Id";
                         using (var command = new SQLiteCommand(query, connection, transaction))
                         {
@@ -94,26 +104,71 @@ namespace ConciliadorBancario.Data
                             command.ExecuteNonQuery();
                         }
 
-                        // Handle unmatching if state changed away from Conciliado
-                        if (nuevoEstado != EstadosMovimiento.Conciliado && matchId.HasValue)
+                        if (nuevoEstado != EstadosMovimiento.Conciliado)
                         {
-                            // Revert counterpart safely
-                            string revQuery = "UPDATE Movimientos SET Estado = @Estado, MatchId = NULL, Observaciones = 'Desvinculado manualmente' WHERE Id = @MId";
-                            using (var revCommand = new SQLiteCommand(revQuery, connection, transaction))
+                            if (matchId.HasValue)
                             {
-                                revCommand.Parameters.AddWithValue("@Estado", EstadosMovimiento.NoEncontrado);
-                                revCommand.Parameters.AddWithValue("@MId", matchId.Value);
-                                revCommand.ExecuteNonQuery();
+                                string revQuery = "UPDATE Movimientos SET Estado = @Estado, MatchId = NULL, Observaciones = 'Desvinculado manualmente' WHERE Id = @MId";
+                                using (var revCommand = new SQLiteCommand(revQuery, connection, transaction))
+                                {
+                                    revCommand.Parameters.AddWithValue("@Estado", EstadosMovimiento.NoEncontrado);
+                                    revCommand.Parameters.AddWithValue("@MId", matchId.Value);
+                                    revCommand.ExecuteNonQuery();
+                                }
+                            }
+                            else if (!string.IsNullOrEmpty(matchGrupoId))
+                            {
+                                // If it was a group match, release ALL items in that group on both sides
+                                string revQueryGroup = "UPDATE Movimientos SET Estado = @Estado, MatchId = NULL, MatchGrupoId = NULL, Observaciones = 'Grupo desvinculado manualmente' WHERE MatchGrupoId = @MGId";
+                                using (var revCommand = new SQLiteCommand(revQueryGroup, connection, transaction))
+                                {
+                                    revCommand.Parameters.AddWithValue("@Estado", EstadosMovimiento.NoEncontrado);
+                                    revCommand.Parameters.AddWithValue("@MGId", matchGrupoId);
+                                    revCommand.ExecuteNonQuery();
+                                }
                             }
 
-                            // Also clear own match id just in case
-                            using (var clearCmd = new SQLiteCommand("UPDATE Movimientos SET MatchId = NULL WHERE Id = @Id", connection, transaction))
+                            // Also clear own match fields just in case
+                            using (var clearCmd = new SQLiteCommand("UPDATE Movimientos SET MatchId = NULL, MatchGrupoId = NULL WHERE Id = @Id", connection, transaction))
                             {
                                 clearCmd.Parameters.AddWithValue("@Id", id);
                                 clearCmd.ExecuteNonQuery();
                             }
                         }
 
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
+                }
+            }
+        }
+
+        public void UpdateEstadoMulti(List<int> ids, string nuevoEstado, string observaciones, string matchGrupoId)
+        {
+            if (ids.Count == 0) return;
+            using (var connection = new SQLiteConnection(DatabaseHelper.ConnectionString))
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        foreach(var id in ids)
+                        {
+                            string query = "UPDATE Movimientos SET Estado = @Estado, Observaciones = @Obs, MatchGrupoId = @MatchGrupoId WHERE Id = @Id";
+                            using (var command = new SQLiteCommand(query, connection, transaction))
+                            {
+                                command.Parameters.AddWithValue("@Estado", nuevoEstado);
+                                command.Parameters.AddWithValue("@Obs", observaciones ?? (object)DBNull.Value);
+                                command.Parameters.AddWithValue("@MatchGrupoId", matchGrupoId);
+                                command.Parameters.AddWithValue("@Id", id);
+                                command.ExecuteNonQuery();
+                            }
+                        }
                         transaction.Commit();
                     }
                     catch
@@ -135,13 +190,17 @@ namespace ConciliadorBancario.Data
                     try
                     {
                         int? matchId = null;
-                        using (var cmd = new SQLiteCommand("SELECT MatchId FROM Movimientos WHERE Id = @Id", connection, transaction))
+                        string matchGrupoId = null;
+                        using (var cmd = new SQLiteCommand("SELECT MatchId, MatchGrupoId FROM Movimientos WHERE Id = @Id", connection, transaction))
                         {
                             cmd.Parameters.AddWithValue("@Id", id);
-                            var result = cmd.ExecuteScalar();
-                            if (result != DBNull.Value && result != null)
+                            using (var reader = cmd.ExecuteReader())
                             {
-                                matchId = Convert.ToInt32(result);
+                                if (reader.Read())
+                                {
+                                    if (reader["MatchId"] != DBNull.Value) matchId = Convert.ToInt32(reader["MatchId"]);
+                                    if (reader["MatchGrupoId"] != DBNull.Value) matchGrupoId = reader["MatchGrupoId"].ToString();
+                                }
                             }
                         }
 
@@ -160,6 +219,15 @@ namespace ConciliadorBancario.Data
                                 cmd.ExecuteNonQuery();
                             }
                         }
+                        else if (!string.IsNullOrEmpty(matchGrupoId))
+                        {
+                             using (var cmd = new SQLiteCommand("UPDATE Movimientos SET Estado = @NoEnc, MatchId = NULL, MatchGrupoId = NULL, Observaciones = 'Desvinculado por eliminación' WHERE MatchGrupoId = @MGId", connection, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@NoEnc", EstadosMovimiento.NoEncontrado);
+                                cmd.Parameters.AddWithValue("@MGId", matchGrupoId);
+                                cmd.ExecuteNonQuery();
+                            }
+                        }
 
                         transaction.Commit();
                     }
@@ -174,9 +242,9 @@ namespace ConciliadorBancario.Data
 
         public void DesactivarMovimientosSistemaPorFecha(DateTime fechaInicio, DateTime? fechaFin, string banco, SQLiteConnection connection, SQLiteTransaction transaction)
         {
-            // First, find all system movements that will be deactivated AND have a MatchId
             var idsToUnmatch = new List<int>();
-            string selectQuery = "SELECT MatchId FROM Movimientos WHERE TipoFuente = 'Sistema' AND Banco = @Banco AND Fecha >= @Inicio AND (@Fin IS NULL OR Fecha <= @Fin) AND MatchId IS NOT NULL";
+            var groupIdsToUnmatch = new List<string>();
+            string selectQuery = "SELECT MatchId, MatchGrupoId FROM Movimientos WHERE TipoFuente = 'Sistema' AND Banco = @Banco AND Fecha >= @Inicio AND (@Fin IS NULL OR Fecha <= @Fin) AND (MatchId IS NOT NULL OR MatchGrupoId IS NOT NULL)";
             using (var cmd = new SQLiteCommand(selectQuery, connection, transaction))
             {
                 cmd.Parameters.AddWithValue("@Inicio", fechaInicio);
@@ -186,12 +254,12 @@ namespace ConciliadorBancario.Data
                 {
                     while (reader.Read())
                     {
-                        idsToUnmatch.Add(Convert.ToInt32(reader["MatchId"]));
+                        if (reader["MatchId"] != DBNull.Value) idsToUnmatch.Add(Convert.ToInt32(reader["MatchId"]));
+                        if (reader["MatchGrupoId"] != DBNull.Value) groupIdsToUnmatch.Add(reader["MatchGrupoId"].ToString());
                     }
                 }
             }
 
-            // Release those counterpart Bank items before deactivating
             foreach (var matchId in idsToUnmatch)
             {
                 string revertQuery = "UPDATE Movimientos SET Estado = @Estado, MatchId = NULL, Observaciones = 'Desvinculado por recarga de sistema' WHERE Id = @Id";
@@ -203,7 +271,17 @@ namespace ConciliadorBancario.Data
                 }
             }
 
-            // Finally, deactivate the system rows
+            foreach (var mgId in groupIdsToUnmatch)
+            {
+                string revertQuery = "UPDATE Movimientos SET Estado = @Estado, MatchId = NULL, MatchGrupoId = NULL, Observaciones = 'Desvinculado por recarga de sistema' WHERE MatchGrupoId = @Id";
+                using (var revCmd = new SQLiteCommand(revertQuery, connection, transaction))
+                {
+                    revCmd.Parameters.AddWithValue("@Estado", EstadosMovimiento.NoEncontrado);
+                    revCmd.Parameters.AddWithValue("@Id", mgId);
+                    revCmd.ExecuteNonQuery();
+                }
+            }
+
             string updateQuery = "UPDATE Movimientos SET Activo = 0 WHERE TipoFuente = 'Sistema' AND Banco = @Banco AND Fecha >= @Inicio AND (@Fin IS NULL OR Fecha <= @Fin)";
             using (var command = new SQLiteCommand(updateQuery, connection, transaction))
             {
@@ -259,6 +337,7 @@ namespace ConciliadorBancario.Data
                 Estado = reader["Estado"].ToString(),
                 Observaciones = reader["Observaciones"] == DBNull.Value ? null : reader["Observaciones"].ToString(),
                 MatchId = reader["MatchId"] == DBNull.Value ? (int?)null : Convert.ToInt32(reader["MatchId"]),
+                MatchGrupoId = reader["MatchGrupoId"] == DBNull.Value ? null : reader["MatchGrupoId"].ToString(),
                 Banco = reader["Banco"] == DBNull.Value ? null : reader["Banco"].ToString(),
                 Activo = Convert.ToInt32(reader["Activo"]) == 1
             };

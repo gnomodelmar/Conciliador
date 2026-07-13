@@ -14,7 +14,8 @@ namespace ConciliadorBancario.Models
         public string CodOperacionSistema { get; set; } // Cod Sistema (Only applies to System rows)
         public string Estado { get; set; }
         public string Observaciones { get; set; }
-        public int? MatchId { get; set; }
+        public int? MatchId { get; set; } // Single match
+        public string MatchGrupoId { get; set; } // N-to-1 match shared UUID
         public string Banco { get; set; }
         public bool Activo { get; set; }
 
