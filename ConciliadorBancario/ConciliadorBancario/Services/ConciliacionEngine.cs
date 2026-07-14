@@ -27,19 +27,21 @@ namespace ConciliadorBancario.Services
 
                 Movimiento match = null;
 
-                // 1. Auto-Match by Operation Code & Amount
-                // Enforces that Bank tags match.
                 if (!string.IsNullOrWhiteSpace(banco.Referencia_CodOperacion))
                 {
                     string cleanBancoCod = banco.Referencia_CodOperacion.TrimStart('0');
                     if (string.IsNullOrEmpty(cleanBancoCod)) cleanBancoCod = "0";
 
-                    match = sistemas.FirstOrDefault(s =>
-                        s.Banco == banco.Banco &&
-                        !string.IsNullOrWhiteSpace(s.CodOperacionSistema) &&
-                        s.CodOperacionSistema.TrimStart('0').Equals(cleanBancoCod, StringComparison.OrdinalIgnoreCase) &&
-                        Math.Abs(s.Monto - banco.Monto) < 0.01 &&
-                        s.Estado == EstadosMovimiento.NoEncontrado);
+                    match = sistemas.FirstOrDefault(s => {
+                        if (string.IsNullOrWhiteSpace(s.CodOperacionSistema) || s.Banco != banco.Banco) return false;
+
+                        string cleanSistCod = s.CodOperacionSistema.TrimStart('0');
+                        if (string.IsNullOrEmpty(cleanSistCod)) cleanSistCod = "0";
+
+                        return cleanSistCod.Equals(cleanBancoCod, StringComparison.OrdinalIgnoreCase) &&
+                               Math.Abs(s.Monto - banco.Monto) < 0.01 &&
+                               s.Estado == EstadosMovimiento.NoEncontrado;
+                    });
 
                     if (match != null)
                     {
@@ -49,7 +51,6 @@ namespace ConciliadorBancario.Services
                     }
                 }
 
-                // 2. Specific Rule: Transferencia Interna (RI ARMOBAR)
                 if (banco.Concepto != null && banco.Concepto.IndexOf("RI ARMOBAR", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     match = sistemas.FirstOrDefault(s =>
@@ -67,7 +68,6 @@ namespace ConciliadorBancario.Services
                     }
                 }
 
-                // 3. Regular auto-match (misma fecha, mismo monto, MISMO BANCO, AND AT LEAST 1 WORD MATCH)
                 var origenWords = GetSignificantWords(banco.Concepto);
                 match = sistemas.FirstOrDefault(s =>
                     s.Banco == banco.Banco &&
@@ -83,7 +83,6 @@ namespace ConciliadorBancario.Services
                 }
             }
 
-            // Asientos Masivos Match
             bancos = _movRepo.GetPendientes("Banco");
             var masivosSistema = sistemas.Where(s => s.Concepto != null && s.Concepto.Contains("[AM-")).ToList();
 

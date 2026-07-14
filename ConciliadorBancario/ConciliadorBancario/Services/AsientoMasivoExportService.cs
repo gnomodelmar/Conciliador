@@ -47,10 +47,12 @@ namespace ConciliadorBancario.Services
 
             foreach (var mov in pendientesAM)
             {
-                // Find matching rule based on what was saved in Observaciones or Concepto
+                // Rely strictly on the exact observation stamp made during import
+                // That way, shorter rules don't incorrectly scoop up items tagged by longer overlapping rules
                 var rule = reglas.FirstOrDefault(r =>
                     r.Banco == mov.Banco &&
-                    mov.Concepto.IndexOf(r.PalabraClave, StringComparison.OrdinalIgnoreCase) >= 0);
+                    !string.IsNullOrEmpty(mov.Observaciones) &&
+                    mov.Observaciones.Equals($"Regla AM: {r.NombreRegla}", StringComparison.OrdinalIgnoreCase));
 
                 if (rule != null)
                 {

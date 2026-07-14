@@ -17,6 +17,7 @@ namespace ConciliadorBancario.Forms
         private Button _btnAutoConciliar;
         private Button _btnExportarMasivos;
         private Button _btnVincular;
+        private Button _btnDesvincular;
         private Button _btnEliminarBanco;
         private Button _btnEliminarSistema;
 
@@ -62,24 +63,29 @@ namespace ConciliadorBancario.Forms
             this.Controls.Add(splitContainer);
 
             var panelBottom = new Panel { Dock = DockStyle.Bottom, Height = 60 };
-            _btnAutoConciliar = new Button { Text = "Auto-Conciliar (Coincidencia Exacta)", Location = new Point(10, 15), Width = 200 };
+
+            _btnAutoConciliar = new Button { Text = "Auto-Conciliar", Location = new Point(10, 15), Width = 100 };
             _btnAutoConciliar.Click += (s, e) => { _engine.AutoConciliar(); LoadData(); MessageBox.Show("Auto-conciliación finalizada."); };
 
-            _btnExportarMasivos = new Button { Text = "Exportar Asientos Masivos", Location = new Point(220, 15), Width = 180 };
+            _btnExportarMasivos = new Button { Text = "Exportar Asientos Mas.", Location = new Point(120, 15), Width = 150 };
             _btnExportarMasivos.Click += BtnExportarMasivos_Click;
 
-            _btnVincular = new Button { Text = "Vincular Seleccionados (Match Manual)", Location = new Point(410, 15), Width = 250 };
+            _btnVincular = new Button { Text = "Vincular Sel.", Location = new Point(280, 15), Width = 120 };
             _btnVincular.Click += BtnVincular_Click;
 
-            _btnEliminarBanco = new Button { Text = "Eliminar Sel. Banco", Location = new Point(670, 15), Width = 150 };
+            _btnDesvincular = new Button { Text = "Desvincular Sel.", Location = new Point(410, 15), Width = 120 };
+            _btnDesvincular.Click += BtnDesvincular_Click;
+
+            _btnEliminarBanco = new Button { Text = "Eliminar Sel. Banco", Location = new Point(540, 15), Width = 130 };
             _btnEliminarBanco.Click += (s, e) => EliminarFilas(_gridBanco);
 
-            _btnEliminarSistema = new Button { Text = "Eliminar Sel. Sistema", Location = new Point(830, 15), Width = 150 };
+            _btnEliminarSistema = new Button { Text = "Eliminar Sel. Sistema", Location = new Point(680, 15), Width = 130 };
             _btnEliminarSistema.Click += (s, e) => EliminarFilas(_gridSistema);
 
             panelBottom.Controls.Add(_btnAutoConciliar);
             panelBottom.Controls.Add(_btnExportarMasivos);
             panelBottom.Controls.Add(_btnVincular);
+            panelBottom.Controls.Add(_btnDesvincular);
             panelBottom.Controls.Add(_btnEliminarBanco);
             panelBottom.Controls.Add(_btnEliminarSistema);
             this.Controls.Add(panelBottom);
@@ -266,7 +272,6 @@ namespace ConciliadorBancario.Forms
         {
             if (_allBanco == null || _allSistema == null || _isUpdatingSelection) return;
 
-            // Save scroll positions
             int scrollBco = _gridBanco.FirstDisplayedScrollingRowIndex;
             int scrollSis = _gridSistema.FirstDisplayedScrollingRowIndex;
 
@@ -306,7 +311,6 @@ namespace ConciliadorBancario.Forms
             _gridBanco.DataSource = new SortableBindingList<Movimiento>(bancoList);
             _gridSistema.DataSource = new SortableBindingList<Movimiento>(sistemaList);
 
-            // Restore scroll positions safely
             if (scrollBco >= 0 && scrollBco < _gridBanco.Rows.Count) _gridBanco.FirstDisplayedScrollingRowIndex = scrollBco;
             if (scrollSis >= 0 && scrollSis < _gridSistema.Rows.Count) _gridSistema.FirstDisplayedScrollingRowIndex = scrollSis;
         }
@@ -361,7 +365,6 @@ namespace ConciliadorBancario.Forms
                             _cmbFiltroSistEst.SelectedIndex = 0;
                         }
 
-                        // Preserve target scroll
                         int scrollSis = targetGrid.FirstDisplayedScrollingRowIndex;
                         targetGrid.DataSource = new SortableBindingList<Movimiento>(candidatos);
                         if (scrollSis >= 0 && scrollSis < targetGrid.Rows.Count) targetGrid.FirstDisplayedScrollingRowIndex = scrollSis;
@@ -421,12 +424,45 @@ namespace ConciliadorBancario.Forms
             }
             else
             {
-                // Multi-match
                 _engine.MarcarConciliadoMulti(movsBanco, movsSistema, $"Match Manual Multi ({movsBanco.Count} Bco vs {movsSistema.Count} Sist)");
             }
 
             LoadData();
             MessageBox.Show("Movimientos vinculados correctamente.");
+        }
+
+        private void BtnDesvincular_Click(object sender, EventArgs e)
+        {
+            // Handle unlinking any selected rows across both grids
+            var toUnlink = new List<Movimiento>();
+            foreach(DataGridViewRow r in _gridBanco.SelectedRows)
+            {
+                var m = r.DataBoundItem as Movimiento;
+                if (m != null && m.Estado == EstadosMovimiento.Conciliado) toUnlink.Add(m);
+            }
+            foreach(DataGridViewRow r in _gridSistema.SelectedRows)
+            {
+                var m = r.DataBoundItem as Movimiento;
+                if (m != null && m.Estado == EstadosMovimiento.Conciliado) toUnlink.Add(m);
+            }
+
+            if (toUnlink.Count == 0)
+            {
+                MessageBox.Show("Seleccione al menos un movimiento 'Conciliado' para desvincular.");
+                return;
+            }
+
+            var res = MessageBox.Show($"¿Desea desvincular {toUnlink.Count} movimiento(s)? Esto devolverá su estado a 'No encontrado'.", "Confirmar", MessageBoxButtons.YesNo);
+            if (res == DialogResult.Yes)
+            {
+                foreach(var mov in toUnlink)
+                {
+                    // UpdateEstado inherently triggers the cascade unmatch logic if changing away from Conciliado
+                    _movRepo.UpdateEstado(mov.Id, EstadosMovimiento.NoEncontrado, "Desvinculado manualmente", mov.MatchId);
+                }
+                LoadData();
+                MessageBox.Show("Movimientos desvinculados correctamente.");
+            }
         }
 
         private void EliminarFilas(DataGridView grid)

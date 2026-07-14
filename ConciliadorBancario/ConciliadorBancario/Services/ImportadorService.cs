@@ -33,7 +33,11 @@ namespace ConciliadorBancario.Services
 
             DataTable dt = filePath.EndsWith(".csv") ? _excelReader.ReadCsvToDataTable(filePath) : _excelReader.ReadExcelToDataTable(filePath);
             var movimientos = new List<Movimiento>();
-            var reglas = _reglasRepo.GetAllReglas();
+
+            // Sort rules by keyword length descending to prevent overlaps (e.g. "Anul. impuesto" vs "impuesto")
+            var reglas = _reglasRepo.GetAllReglas()
+                .OrderByDescending(r => r.PalabraClave.Length)
+                .ToList();
 
             foreach (DataRow row in dt.Rows)
             {
@@ -86,7 +90,7 @@ namespace ConciliadorBancario.Services
                     {
                         mov.Estado = EstadosMovimiento.PendienteAsientoMasivo;
                         mov.Observaciones = $"Regla AM: {regla.NombreRegla}";
-                        break;
+                        break; // Stop evaluating shorter rules since we found the longest match
                     }
                 }
 
