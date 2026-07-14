@@ -26,12 +26,16 @@ namespace ConciliadorBancario.Services
                 if (banco.Estado == EstadosMovimiento.PendienteAsientoMasivo) continue;
 
                 Movimiento match = null;
+
+                // 1. Auto-Match by Operation Code & Amount
+                // Enforces that Bank tags match.
                 if (!string.IsNullOrWhiteSpace(banco.Referencia_CodOperacion))
                 {
                     string cleanBancoCod = banco.Referencia_CodOperacion.TrimStart('0');
                     if (string.IsNullOrEmpty(cleanBancoCod)) cleanBancoCod = "0";
 
                     match = sistemas.FirstOrDefault(s =>
+                        s.Banco == banco.Banco &&
                         !string.IsNullOrWhiteSpace(s.CodOperacionSistema) &&
                         s.CodOperacionSistema.TrimStart('0').Equals(cleanBancoCod, StringComparison.OrdinalIgnoreCase) &&
                         Math.Abs(s.Monto - banco.Monto) < 0.01 &&
@@ -45,24 +49,48 @@ namespace ConciliadorBancario.Services
                     }
                 }
 
+                // 2. Specific Rule: Transferencia Interna (RI ARMOBAR)
+                if (banco.Concepto != null && banco.Concepto.IndexOf("RI ARMOBAR", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    match = sistemas.FirstOrDefault(s =>
+                        s.Banco == banco.Banco &&
+                        Math.Abs(s.Monto - banco.Monto) < 0.01 &&
+                        s.Fecha.Date == banco.Fecha.Date &&
+                        s.Concepto != null && s.Concepto.IndexOf("Transferencia interna", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        s.Estado == EstadosMovimiento.NoEncontrado);
+
+                    if (match != null)
+                    {
+                        MarcarConciliado(banco, match, $"Auto Match Transferencia Interna");
+                        sistemas.Remove(match);
+                        continue;
+                    }
+                }
+
+                // 3. Regular auto-match (misma fecha, mismo monto, MISMO BANCO, AND AT LEAST 1 WORD MATCH)
+                var origenWords = GetSignificantWords(banco.Concepto);
                 match = sistemas.FirstOrDefault(s =>
+                    s.Banco == banco.Banco &&
                     Math.Abs(s.Monto - banco.Monto) < 0.01 &&
                     s.Fecha.Date == banco.Fecha.Date &&
-                    s.Estado == EstadosMovimiento.NoEncontrado);
+                    s.Estado == EstadosMovimiento.NoEncontrado &&
+                    CountWordOverlap(origenWords, s.Concepto) > 0);
 
                 if (match != null)
                 {
-                    MarcarConciliado(banco, match, $"Auto Match Exacto Sist:[{match.CodOperacionSistema}] Banco:[{banco.Referencia_CodOperacion}]");
+                    MarcarConciliado(banco, match, $"Auto Match Exacto (Monto, Fecha, Palabra Clave)");
                     sistemas.Remove(match);
                 }
             }
 
+            // Asientos Masivos Match
             bancos = _movRepo.GetPendientes("Banco");
             var masivosSistema = sistemas.Where(s => s.Concepto != null && s.Concepto.Contains("[AM-")).ToList();
 
             foreach(var sys in masivosSistema)
             {
                 var bancoMatch = bancos.FirstOrDefault(b =>
+                    b.Banco == sys.Banco &&
                     b.Estado == EstadosMovimiento.PendienteAsientoMasivo &&
                     Math.Abs(sys.Monto - b.Monto) < 0.01 &&
                     b.Fecha.Date == sys.Fecha.Date);
